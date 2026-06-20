@@ -84,8 +84,6 @@ const DEFAULT_STATE = {
   log: [],
 }
 
-const ss = (obj) => Object.entries(obj).map(([k,v]) => `${k}:${v}`).join(';')
-
 export default function Home() {
   const [state, setState]       = useState(null)
   const [view, setView]         = useState('board')
@@ -546,3 +544,4 @@ export default function Home() {
       </nav>
     </div>
   )
+}
