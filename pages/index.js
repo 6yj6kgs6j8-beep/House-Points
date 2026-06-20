@@ -1,68 +1,67 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 
-// ─── CONFIG ───────────────────────────────────────────────────────────────────
-
 const TASKS = [
-  // SELF CARE
-  { id: 'self_care',     label: 'Self-care basics ✨',          desc: 'Breakfast, face wash, teeth, shower', points: 1, type: 'daily',    who: 'all' },
-  // DAILY ASSIGNED
-  { id: 'dishes_in',    label: 'Dishes in dishwasher',          desc: '',             points: 1, type: 'daily',    who: 'Chyna' },
-  { id: 'dishes_up',    label: 'Put dishes away',               desc: '',             points: 1, type: 'daily',    who: 'Jet'   },
-  { id: 'kitchen_table',label: 'Wipe & reset kitchen table',    desc: '',             points: 1, type: 'daily',    who: 'Jet'   },
-  { id: 'living_reset', label: 'Living room reset',             desc: '',             points: 1, type: 'daily',    who: 'Joe'   },
-  { id: 'cat_litter',   label: 'Cat litter',                    desc: 'Alternate',    points: 1, type: 'daily',    who: 'Chyna/Joe' },
-  { id: 'read_30',      label: 'Read 30 minutes 📖',            desc: '',             points: 1, type: 'daily',    who: 'all'   },
-  // WEEKLY
-  { id: 'bathroom',     label: 'Clean bathroom',                desc: 'Alternate',    points: 3, type: 'weekly',   who: 'Chyna/Joe' },
-  { id: 'bathroom_jet', label: 'Clean bathroom',                desc: '',             points: 3, type: 'weekly',   who: 'Jet'   },
-  { id: 'sheets',       label: 'Change sheets',                 desc: 'Alternate',    points: 2, type: 'weekly',   who: 'Chyna/Joe' },
-  { id: 'sheets_jet',   label: 'Change sheets',                 desc: '',             points: 2, type: 'weekly',   who: 'Jet'   },
-  { id: 'sweep_kitchen',label: 'Sweep kitchen',                 desc: '',             points: 1, type: 'weekly',   who: 'Jet'   },
-  { id: 'fold_laundry', label: 'Fold washed clothes',           desc: '',             points: 2, type: 'weekly',   who: 'all'   },
-  { id: 'spruce_room',  label: 'Spruce up your room',           desc: '',             points: 1, type: 'weekly',   who: 'all'   },
-  { id: 'fridge_clean', label: 'Clean out fridge',              desc: '',             points: 2, type: 'weekly',   who: 'Chyna' },
-  { id: 'grocery_inv',  label: 'Grocery inventory',             desc: '',             points: 1, type: 'weekly',   who: 'Chyna' },
-  { id: 'trash_out',    label: 'Take out trash',                desc: 'When needed',  points: 1, type: 'asneeded', who: 'Jet'   },
-  // BI-WEEKLY
-  { id: 'mop_floors',   label: 'Mop floors',                    desc: 'Alternate',    points: 3, type: 'biweekly', who: 'Chyna/Joe' },
-  // MONTHLY
-  { id: 'meal_prep',    label: 'Meal prep session 🍱',          desc: '',             points: 4, type: 'monthly',  who: 'Chyna' },
-  { id: 'deep_clean',   label: 'Deep clean a room',             desc: '',             points: 4, type: 'monthly',  who: 'all'   },
+  { id: 'dishes_in',     label: 'Dishes in dishwasher',           desc: '',            points: 1, type: 'daily',    who: 'Chyna' },
+  { id: 'dishes_up',     label: 'Put dishes away',                desc: '',            points: 1, type: 'daily',    who: 'Jet'   },
+  { id: 'living_reset',  label: 'Living room reset',              desc: '',            points: 1, type: 'daily',    who: 'Joe'   },
+  { id: 'cat_litter',    label: 'Cat litter',                     desc: '',            points: 1, type: 'daily',    who: 'Joe'   },
+  { id: 'read_30',       label: 'Read 30 minutes',                desc: '',            points: 1, type: 'daily',    who: 'all'   },
+  { id: 'bathroom_cj',   label: 'Clean bathroom',                 desc: 'Chyna/Joe alternate', points: 3, type: 'weekly', who: 'Chyna/Joe' },
+  { id: 'bathroom_jet',  label: 'Clean bathroom',                 desc: '',            points: 3, type: 'weekly',   who: 'Jet'   },
+  { id: 'sheets_cj',     label: 'Change sheets',                  desc: 'Chyna/Joe alternate', points: 2, type: 'weekly', who: 'Chyna/Joe' },
+  { id: 'sheets_jet',    label: 'Change sheets',                  desc: '',            points: 2, type: 'weekly',   who: 'Jet'   },
+  { id: 'sweep_kitchen', label: 'Sweep kitchen',                  desc: '',            points: 1, type: 'weekly',   who: 'Jet'   },
+  { id: 'fold_chyna',    label: 'Fold your laundry',              desc: '',            points: 2, type: 'weekly',   who: 'Chyna' },
+  { id: 'fold_joe',      label: 'Fold your laundry',              desc: '',            points: 2, type: 'weekly',   who: 'Joe'   },
+  { id: 'fold_jet',      label: 'Fold your laundry',              desc: '',            points: 2, type: 'weekly',   who: 'Jet'   },
+  { id: 'wash_load',     label: 'Put all 3 baskets in washer',    desc: 'Chyna/Joe alternate', points: 2, type: 'weekly', who: 'Chyna/Joe' },
+  { id: 'dry_baskets',   label: 'Move dry clothes to baskets',    desc: '',            points: 1, type: 'weekly',   who: 'Chyna' },
+  { id: 'spruce_room',   label: 'Spruce up your room',            desc: '',            points: 1, type: 'weekly',   who: 'all'   },
+  { id: 'fridge_clean',  label: 'Clean out fridge',               desc: '',            points: 2, type: 'weekly',   who: 'Chyna' },
+  { id: 'grocery_inv',   label: 'Grocery inventory',              desc: '',            points: 1, type: 'weekly',   who: 'Chyna' },
+  { id: 'trash_out',     label: 'Take out trash',                 desc: 'When needed', points: 1, type: 'asneeded', who: 'Jet'   },
+  { id: 'mop_floors',    label: 'Mop floors',                     desc: 'Chyna/Joe alternate', points: 3, type: 'biweekly', who: 'Chyna/Joe' },
+  { id: 'meal_prep',     label: 'Meal prep session',              desc: '',            points: 4, type: 'monthly',  who: 'Chyna' },
+  { id: 'deep_clean',    label: 'Deep clean a room',              desc: '',            points: 4, type: 'monthly',  who: 'all'   },
 ]
 
 const WEEKLY_BASELINE = {
-  Chyna: ['self_care', 'dishes_in', 'read_30', 'fridge_clean', 'spruce_room'],
-  Joe:   ['self_care', 'living_reset', 'read_30', 'fold_laundry', 'spruce_room'],
-  Jet:   ['self_care', 'dishes_up', 'kitchen_table', 'read_30', 'bathroom_jet', 'sweep_kitchen', 'spruce_room'],
+  Chyna: ['dishes_in', 'read_30', 'wash_load', 'dry_baskets', 'fold_chyna', 'fridge_clean', 'spruce_room'],
+  Joe:   ['living_reset', 'cat_litter', 'read_30', 'fold_joe', 'spruce_room'],
+  Jet:   ['dishes_up', 'read_30', 'bathroom_jet', 'sweep_kitchen', 'fold_jet', 'spruce_room'],
 }
 
 const REWARDS = {
-  daily:   { Chyna: 'Sour Patch Kids handful 🍬', Joe: 'Sour Patch Kids handful 🍬', Jet: 'Sour Patch Kids handful 🍬' },
-  weekly:  { Chyna: 'Solo bath time — no interruptions 🛁', Joe: 'Pick the show tonight 📺', Jet: 'Stay up 1 hr late (non-school night) 🌙' },
-  monthly: 'Family outing or movie night 🎬',
+  daily:  { Chyna: 'a cookie', Joe: 'Sour Patch Kids handful', Jet: 'Sour Patch Kids handful' },
+  weekly: { Chyna: 'solo thrift store trip', Joe: 'Liquid Death + Slim Jim + big Sour Patch', Jet: 'stay up 1 hr late (non-school night)' },
+  monthly: 'family outing or movie night',
 }
 
 const MEMBERS = ['Chyna', 'Joe', 'Jet']
-const FAMILY_GOAL = 50
+const FAMILY_GOAL = 35
 
-const C = {
-  bg: '#1a1a2e', card: '#16213e', accent: '#e94560',
-  gold: '#f5a623', sage: '#7ec8a4', text: '#eaeaea',
-  muted: '#8892a4', border: '#2a2a4a',
+const EMOJIS = { Chyna: '🌸', Joe: '⚡', Jet: '✨' }
+
+const PALETTE = {
+  bg:       '#FFF8F0',
+  card:     '#FFFFFF',
+  border:   '#F0E6D8',
+  text:     '#3D2C1E',
+  muted:    '#9E8572',
+  Chyna:    { main: '#D4637A', light: '#FCE8EC', dark: '#8C2D3E' },
+  Joe:      { main: '#E8943A', light: '#FEF0E0', dark: '#8C4A10' },
+  Jet:      { main: '#5BA98B', light: '#E2F4EE', dark: '#2A6650' },
+  gold:     '#F0B429',
+  goldLight:'#FEF7E0',
+  purple:   '#8B6CC8',
+  purpleLight: '#F0EBFC',
 }
 
-const memberColor = { Chyna: C.accent, Joe: C.gold, Jet: C.sage }
-
-const badge = (pts) => pts >= 3
-  ? { label: '💎 Big',   color: C.accent }
-  : pts === 2
-  ? { label: '⭐ Med',   color: C.gold }
-  : { label: '✓ Quick', color: C.sage }
-
-const TYPE_LABEL = { daily: 'Daily', weekly: 'Weekly', biweekly: 'Bi-Weekly', asneeded: 'As Needed', monthly: 'Monthly / Big' }
-
-// ─── SUPABASE HELPERS ─────────────────────────────────────────────────────────
+const TYPE_LABEL = {
+  daily: 'Every day', weekly: 'Every week',
+  biweekly: 'Every two weeks', asneeded: 'As needed', monthly: 'Once a month'
+}
 
 async function fetchState() {
   const { data } = await supabase.from('app_state').select('*').eq('id', 1).single()
@@ -72,8 +71,6 @@ async function fetchState() {
 async function pushState(state) {
   await supabase.from('app_state').upsert({ id: 1, state, updated_at: new Date().toISOString() })
 }
-
-// ─── DEFAULT STATE ────────────────────────────────────────────────────────────
 
 const DEFAULT_STATE = {
   week: 1, month: 1,
@@ -87,105 +84,69 @@ const DEFAULT_STATE = {
   log: [],
 }
 
-// ─── STYLES ───────────────────────────────────────────────────────────────────
-
-const sx = {
-  app:      { minHeight: '100svh', background: C.bg, color: C.text, fontFamily: 'inherit', paddingBottom: 72 },
-  header:   { background: C.card, borderBottom: `2px solid ${C.accent}`, padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 50 },
-  title:    { fontSize: 18, fontWeight: 800, color: C.accent, letterSpacing: 1 },
-  sub:      { fontSize: 11, color: C.muted, marginTop: 2 },
-  page:     { padding: '14px 14px 0' },
-  card:     { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 12 },
-  label:    { fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 },
-  bigNum:   { fontSize: 32, fontWeight: 900, lineHeight: 1 },
-  bar:      { height: 8, background: C.border, borderRadius: 99, overflow: 'hidden', marginTop: 8 },
-  fill:     (pct, color) => ({ height: '100%', width: `${pct}%`, background: color, borderRadius: 99, transition: 'width .5s ease' }),
-  pill:     (color) => ({ display: 'inline-block', background: `${color}22`, color, border: `1px solid ${color}55`, borderRadius: 99, padding: '2px 10px', fontSize: 11, fontWeight: 700 }),
-  btn:      (color, outline) => ({ background: outline ? 'transparent' : color, color: outline ? color : '#fff', border: `2px solid ${color}`, borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }),
-  taskRow:  (sel) => ({ background: sel ? `${C.accent}22` : `${C.border}44`, border: `1px solid ${sel ? C.accent : C.border}`, borderRadius: 10, padding: '11px 13px', marginBottom: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }),
-  mCard:    (color) => ({ background: C.card, border: `1px solid ${color}33`, borderLeft: `4px solid ${color}`, borderRadius: 12, padding: 14, marginBottom: 10 }),
-  nav:      { position: 'fixed', bottom: 0, left: 0, right: 0, background: C.card, borderTop: `1px solid ${C.border}`, display: 'flex', zIndex: 100 },
-  navBtn:   (active) => ({ flex: 1, padding: '10px 4px', background: 'none', border: 'none', color: active ? C.accent : C.muted, fontSize: 10, fontWeight: active ? 700 : 400, cursor: 'pointer', borderTop: active ? `2px solid ${C.accent}` : '2px solid transparent' }),
-  toast:    (color) => ({ position: 'fixed', top: 20, left: '50%', transform: 'translateX(-50%)', background: color, color: '#fff', padding: '10px 22px', borderRadius: 99, fontWeight: 700, fontSize: 13, zIndex: 999, boxShadow: '0 4px 20px #0008', whiteSpace: 'nowrap' }),
-  divider:  { borderTop: `1px solid ${C.border}`, margin: '10px 0' },
-}
-
-// ─── APP ──────────────────────────────────────────────────────────────────────
+const ss = (obj) => Object.entries(obj).map(([k,v]) => `${k}:${v}`).join(';')
 
 export default function Home() {
-  const [state, setState]           = useState(null)
-  const [view, setView]             = useState('board')
-  const [me, setMe]                 = useState(null)         // who is using this device right now
-  const [selectedTask, setTask]     = useState(null)
-  const [submitter, setSubmitter]   = useState('Chyna')
-  const [toast, setToast]           = useState(null)
-  const [syncing, setSyncing]       = useState(false)
-  const [loading, setLoading]       = useState(true)
+  const [state, setState]       = useState(null)
+  const [view, setView]         = useState('board')
+  const [me, setMe]             = useState(null)
+  const [selectedTask, setTask] = useState(null)
+  const [submitter, setSub]     = useState('Chyna')
+  const [toast, setToast]       = useState(null)
+  const [loading, setLoading]   = useState(true)
+  const [syncing, setSyncing]   = useState(false)
 
-  // ── Load & subscribe ──
   useEffect(() => {
-    fetchState().then(s => {
-      setState(s || DEFAULT_STATE)
-      setLoading(false)
-    })
-
-    const channel = supabase
-      .channel('state-sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_state' }, payload => {
-        if (payload.new?.state) setState(payload.new.state)
-      })
-      .subscribe()
-
-    return () => supabase.removeChannel(channel)
+    fetchState().then(s => { setState(s || DEFAULT_STATE); setLoading(false) })
+    const ch = supabase.channel('sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_state' }, p => {
+        if (p.new?.state) setState(p.new.state)
+      }).subscribe()
+    return () => supabase.removeChannel(ch)
   }, [])
 
-  const update = useCallback(async (updater) => {
+  const update = useCallback((fn) => {
     setSyncing(true)
     setState(prev => {
-      const next = updater(prev)
+      const next = fn(prev)
       pushState(next).finally(() => setSyncing(false))
       return next
     })
   }, [])
 
-  const showToast = (msg, color = C.sage) => {
-    setToast({ msg, color })
-    setTimeout(() => setToast(null), 2800)
+  const toast$ = (msg, type = 'good') => {
+    setToast({ msg, type })
+    setTimeout(() => setToast(null), 2600)
   }
 
-  // ── Actions ──
   const submitTask = () => {
     if (!selectedTask) return
     const task = TASKS.find(t => t.id === selectedTask)
     const item = { id: Date.now(), who: submitter, taskId: task.id, taskLabel: task.label, points: task.points }
     update(s => ({ ...s, pendingApprovals: [...s.pendingApprovals, item] }))
     setTask(null)
-    showToast(`"${task.label}" sent for approval!`, C.gold)
+    toast$(`Sent for approval! +${task.points} pts pending`, 'pending')
     setView('board')
   }
 
-  const approveTask = (approver, pendingId) => {
+  const approveTask = (pendingId) => {
     update(s => {
       const item = s.pendingApprovals.find(p => p.id === pendingId)
-      if (!item || item.who === approver) return s
-      const newMembers = {
-        ...s.members,
-        [item.who]: { ...s.members[item.who], points: s.members[item.who].points + item.points }
-      }
+      if (!item || item.who === me) return s
       return {
         ...s,
-        members: newMembers,
+        members: { ...s.members, [item.who]: { ...s.members[item.who], points: s.members[item.who].points + item.points } },
         familyPoints: s.familyPoints + item.points,
         pendingApprovals: s.pendingApprovals.filter(p => p.id !== pendingId),
-        log: [{ text: `${approver} approved ${item.who}: +${item.points}pt for ${item.taskLabel}`, ts: Date.now() }, ...s.log.slice(0, 29)],
+        log: [{ text: `${me} approved ${item.who}: +${item.points} pt for "${item.taskLabel}"`, ts: Date.now() }, ...s.log.slice(0, 29)],
       }
     })
-    showToast('Approved! Points added ✓', C.sage)
+    toast$('Points added!', 'good')
   }
 
   const rejectTask = (pendingId) => {
     update(s => ({ ...s, pendingApprovals: s.pendingApprovals.filter(p => p.id !== pendingId) }))
-    showToast('Task removed.', C.muted)
+    toast$('Task removed', 'muted')
   }
 
   const claimWeeklyReward = (member) => {
@@ -194,126 +155,213 @@ export default function Home() {
       return {
         ...s,
         members: { ...s.members, [member]: { ...s.members[member], weeklyRewardClaimed: true } },
-        log: [{ text: `${member} claimed their weekly reward 🎉`, ts: Date.now() }, ...s.log.slice(0, 29)],
+        log: [{ text: `${member} claimed their weekly reward`, ts: Date.now() }, ...s.log.slice(0, 29)],
       }
     })
-    showToast(`Enjoy it, ${member}! 🎉`, C.gold)
+    toast$(`Enjoy it, ${member}!`, 'gold')
   }
 
   const resetWeek = () => {
     update(s => {
-      const newMembers = {}
-      MEMBERS.forEach(m => { newMembers[m] = { ...s.members[m], weeklyRewardClaimed: false } })
-      return { ...s, members: newMembers, week: s.week + 1, log: [{ text: `Week ${s.week + 1} started`, ts: Date.now() }, ...s.log.slice(0, 29)] }
+      const nm = {}
+      MEMBERS.forEach(m => { nm[m] = { ...s.members[m], weeklyRewardClaimed: false } })
+      return { ...s, members: nm, week: s.week + 1, log: [{ text: `Week ${s.week + 1} started`, ts: Date.now() }, ...s.log.slice(0,29)] }
     })
-    showToast('New week started!', C.accent)
+    toast$('New week!', 'good')
   }
 
   const resetMonth = () => {
     update(s => ({
       ...s, familyPoints: 0, month: s.month + 1,
-      log: [{ text: `Month ${s.month + 1} started — points reset 🎊`, ts: Date.now() }, ...s.log.slice(0, 29)],
+      log: [{ text: `Month ${s.month + 1} — points reset`, ts: Date.now() }, ...s.log.slice(0,29)],
     }))
-    showToast('New month! Family points reset.', C.accent)
+    toast$('New month started!', 'good')
   }
 
-  // ── Who-picker screen ──
+  const P = PALETTE
+
+  const card = (extra = {}) => ({
+    background: P.card,
+    border: `1.5px solid ${P.border}`,
+    borderRadius: 20,
+    padding: '16px 18px',
+    marginBottom: 14,
+    ...extra,
+  })
+
+  const btn = (bg, color, extra = {}) => ({
+    background: bg,
+    color,
+    border: 'none',
+    borderRadius: 14,
+    padding: '10px 18px',
+    fontSize: 14,
+    fontWeight: 700,
+    cursor: 'pointer',
+    ...extra,
+  })
+
+  const pill = (bg, color) => ({
+    display: 'inline-block',
+    background: bg,
+    color,
+    borderRadius: 99,
+    padding: '3px 12px',
+    fontSize: 12,
+    fontWeight: 700,
+  })
+
+  const toastColors = {
+    good: { bg: P.Jet.main, color: '#fff' },
+    pending: { bg: P.gold, color: P.text },
+    gold: { bg: P.purple, color: '#fff' },
+    muted: { bg: P.muted, color: '#fff' },
+  }
+
   if (!me) {
     return (
-      <div style={{ ...sx.app, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 32 }}>
-        <div style={{ fontSize: 48 }}>🏠</div>
-        <div style={{ fontSize: 22, fontWeight: 800, color: C.accent }}>House Points</div>
-        <div style={{ color: C.muted, fontSize: 14, marginBottom: 8 }}>Who are you?</div>
-        {MEMBERS.map(m => (
-          <button key={m} style={{ ...sx.btn(memberColor[m]), width: 200, padding: 14, fontSize: 16 }} onClick={() => setMe(m)}>
-            {m}
-          </button>
-        ))}
+      <div style={{ minHeight: '100svh', background: P.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, gap: 16 }}>
+        <div style={{ fontSize: 56 }}>🏡</div>
+        <div style={{ fontSize: 26, fontWeight: 800, color: P.text }}>House Points</div>
+        <div style={{ color: P.muted, fontSize: 15, marginBottom: 8 }}>Who's playing?</div>
+        {MEMBERS.map(m => {
+          const c = P[m]
+          return (
+            <button key={m} onClick={() => setMe(m)} style={{
+              background: c.light,
+              color: c.dark,
+              border: `2px solid ${c.main}`,
+              borderRadius: 18,
+              padding: '14px 0',
+              width: 220,
+              fontSize: 18,
+              fontWeight: 800,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 10,
+            }}>
+              <span style={{ fontSize: 24 }}>{EMOJIS[m]}</span> {m}
+            </button>
+          )
+        })}
       </div>
     )
   }
 
   if (loading || !state) {
-    return (
-      <div style={{ ...sx.app, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ color: C.muted }}>Loading…</div>
-      </div>
-    )
+    return <div style={{ minHeight: '100svh', background: P.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: P.muted }}>Loading...</div>
   }
 
   const familyPct = Math.min(100, Math.round((state.familyPoints / FAMILY_GOAL) * 100))
   const goalMet   = state.familyPoints >= FAMILY_GOAL
   const pending   = state.pendingApprovals.length
+  const myColor   = P[me]
+
+  const navItems = [
+    { id: 'board',   icon: '🏠', label: 'Home' },
+    { id: 'tasks',   icon: '✅', label: 'Log Task' },
+    { id: 'approve', icon: '👍', label: pending > 0 ? `Approve (${pending})` : 'Approve' },
+    { id: 'rewards', icon: '🎁', label: 'Rewards' },
+  ]
 
   return (
-    <div style={sx.app}>
-      {toast && <div style={sx.toast(toast.color)}>{toast.msg}</div>}
+    <div style={{ minHeight: '100svh', background: P.bg, color: P.text, fontFamily: 'inherit', paddingBottom: 80 }}>
+      {toast && (
+        <div style={{
+          position: 'fixed', top: 18, left: '50%', transform: 'translateX(-50%)',
+          background: toastColors[toast.type].bg, color: toastColors[toast.type].color,
+          padding: '10px 24px', borderRadius: 99, fontWeight: 700, fontSize: 14,
+          zIndex: 999, boxShadow: '0 4px 24px rgba(0,0,0,0.12)', whiteSpace: 'nowrap',
+        }}>{toast.msg}</div>
+      )}
 
       {/* HEADER */}
-      <header style={sx.header}>
+      <div style={{
+        background: P.card, borderBottom: `1.5px solid ${P.border}`,
+        padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        position: 'sticky', top: 0, zIndex: 50,
+      }}>
         <div>
-          <div style={sx.title}>🏠 House Points</div>
-          <div style={sx.sub}>Week {state.week} · Month {state.month} {syncing ? '· syncing…' : ''}</div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: P.text }}>🏡 House Points</div>
+          <div style={{ fontSize: 11, color: P.muted }}>Week {state.week} · Month {state.month}{syncing ? ' · saving...' : ''}</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 10, color: C.muted }}>Family pot</div>
-            <div style={{ fontSize: 20, fontWeight: 900, color: goalMet ? C.gold : C.text }}>
-              {state.familyPoints}<span style={{ fontSize: 12, color: C.muted }}>/{FAMILY_GOAL}</span>
+            <div style={{ fontSize: 10, color: P.muted }}>Family pot</div>
+            <div style={{ fontSize: 20, fontWeight: 900, color: goalMet ? P.gold : P.text }}>
+              {state.familyPoints}<span style={{ fontSize: 12, color: P.muted, fontWeight: 400 }}>/{FAMILY_GOAL}</span>
             </div>
           </div>
-          <button style={{ ...sx.btn(memberColor[me], true), padding: '4px 10px', fontSize: 11 }} onClick={() => setMe(null)}>
-            {me}
-          </button>
+          <button onClick={() => setMe(null)} style={{
+            background: myColor.light, color: myColor.dark,
+            border: `1.5px solid ${myColor.main}`, borderRadius: 99,
+            padding: '5px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+          }}>{EMOJIS[me]} {me}</button>
         </div>
-      </header>
+      </div>
 
-      {/* ── BOARD ── */}
+      {/* BOARD */}
       {view === 'board' && (
-        <div style={sx.page}>
+        <div style={{ padding: '16px 16px 0' }}>
+
           {/* Family goal */}
-          <div style={sx.card}>
-            <div style={sx.label}>Family Goal — Month {state.month}</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-              <div style={{ ...sx.bigNum, color: goalMet ? C.gold : C.text }}>{state.familyPoints}</div>
-              <div style={{ color: C.muted }}>/ {FAMILY_GOAL} pts</div>
+          <div style={{ ...card(), background: goalMet ? P.goldLight : P.card, border: `1.5px solid ${goalMet ? P.gold : P.border}` }}>
+            <div style={{ fontSize: 11, color: P.muted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Family goal — month {state.month}</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 10 }}>
+              <span style={{ fontSize: 36, fontWeight: 900, color: goalMet ? P.gold : P.text }}>{state.familyPoints}</span>
+              <span style={{ color: P.muted }}>/ {FAMILY_GOAL} pts</span>
+              {goalMet && <span style={{ ...pill(P.gold, P.text), marginLeft: 4 }}>Goal hit! 🎉</span>}
             </div>
-            <div style={sx.bar}><div style={sx.fill(familyPct, goalMet ? C.gold : C.accent)} /></div>
-            {goalMet && <div style={{ marginTop: 10, color: C.gold, fontWeight: 700 }}>🎉 Goal hit! {REWARDS.monthly}</div>}
-            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-              <button style={{ ...sx.btn(C.muted, true), fontSize: 11 }} onClick={resetWeek}>End Week</button>
-              {goalMet && <button style={{ ...sx.btn(C.accent), fontSize: 11 }} onClick={resetMonth}>New Month</button>}
+            <div style={{ height: 12, background: P.border, borderRadius: 99, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${familyPct}%`, background: goalMet ? P.gold : P.purple, borderRadius: 99, transition: 'width .5s ease' }} />
+            </div>
+            {goalMet && <div style={{ marginTop: 12, fontSize: 14, color: P.text, fontWeight: 600 }}>🎬 {REWARDS.monthly}</div>}
+            <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+              <button onClick={resetWeek} style={btn(P.border, P.muted, { fontSize: 12, padding: '8px 14px' })}>End week</button>
+              {goalMet && <button onClick={resetMonth} style={btn(P.gold, P.text, { fontSize: 12, padding: '8px 14px' })}>Start new month</button>}
             </div>
           </div>
 
           {/* Members */}
           {MEMBERS.map(m => {
             const mem = state.members[m]
-            const color = memberColor[m]
+            const c = P[m]
             return (
-              <div key={m} style={sx.mCard(color)}>
+              <div key={m} style={{ ...card(), borderColor: c.main + '55', borderWidth: 2 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ fontWeight: 800, fontSize: 16 }}>{m} {m === me ? <span style={{ fontSize: 10, color: C.muted }}>(you)</span> : ''}</div>
-                  <div style={{ ...sx.bigNum, fontSize: 26, color }}>{mem.points} <span style={{ fontSize: 12, color: C.muted, fontWeight: 400 }}>pts</span></div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 44, height: 44, borderRadius: 14, background: c.light, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>{EMOJIS[m]}</div>
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: 16 }}>{m} {m === me && <span style={{ fontSize: 11, color: P.muted, fontWeight: 400 }}>(you)</span>}</div>
+                      <div style={{ fontSize: 12, color: P.muted }}>Weekly: {REWARDS.weekly[m]}</div>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 30, fontWeight: 900, color: c.main }}>{mem.points}</div>
+                    <div style={{ fontSize: 11, color: P.muted }}>pts</div>
+                  </div>
                 </div>
-                <div style={{ fontSize: 12, color: C.muted, marginTop: 6 }}>
-                  Weekly reward: <span style={{ color }}>{REWARDS.weekly[m]}</span>
+                <div style={{ marginTop: 12 }}>
+                  {!mem.weeklyRewardClaimed
+                    ? <button onClick={() => claimWeeklyReward(m)} style={btn(c.light, c.dark, { fontSize: 12, padding: '8px 14px', border: `1.5px solid ${c.main}` })}>
+                        Claim weekly reward
+                      </button>
+                    : <span style={pill(c.light, c.dark)}>✓ Reward claimed this week</span>
+                  }
                 </div>
-                {!mem.weeklyRewardClaimed
-                  ? <button style={{ ...sx.btn(color, true), marginTop: 8, fontSize: 11 }} onClick={() => claimWeeklyReward(m)}>Claim weekly reward</button>
-                  : <div style={{ ...sx.pill(C.sage), marginTop: 8 }}>✓ Reward claimed this week</div>
-                }
               </div>
             )
           })}
 
-          {/* Pending notice */}
+          {/* Pending */}
           {pending > 0 && (
-            <div style={{ ...sx.card, borderColor: C.gold + '66' }}>
-              <div style={sx.label}>⏳ Waiting for approval ({pending})</div>
+            <div style={{ ...card(), borderColor: P.gold }}>
+              <div style={{ fontSize: 11, color: P.muted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Waiting for approval ({pending})</div>
               {state.pendingApprovals.map(p => (
-                <div key={p.id} style={{ fontSize: 12, color: C.muted, padding: '4px 0', borderBottom: `1px solid ${C.border}` }}>
-                  <span style={{ color: memberColor[p.who], fontWeight: 700 }}>{p.who}</span> → {p.taskLabel} (+{p.points}pt)
+                <div key={p.id} style={{ fontSize: 13, color: P.muted, padding: '4px 0', borderBottom: `1px solid ${P.border}` }}>
+                  <span style={{ color: P[p.who].main, fontWeight: 700 }}>{p.who}</span> · {p.taskLabel} <span style={pill(P.goldLight, P.gold)}>+{p.points}</span>
                 </div>
               ))}
             </div>
@@ -321,49 +369,64 @@ export default function Home() {
 
           {/* Log */}
           {state.log.length > 0 && (
-            <div style={sx.card}>
-              <div style={sx.label}>Recent activity</div>
-              {state.log.slice(0, 6).map((l, i) => (
-                <div key={i} style={{ fontSize: 12, color: C.muted, padding: '3px 0' }}>• {l.text}</div>
+            <div style={card()}>
+              <div style={{ fontSize: 11, color: P.muted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Recent activity</div>
+              {state.log.slice(0, 5).map((l, i) => (
+                <div key={i} style={{ fontSize: 12, color: P.muted, padding: '3px 0' }}>· {l.text}</div>
               ))}
             </div>
           )}
         </div>
       )}
 
-      {/* ── LOG TASK ── */}
+      {/* LOG TASK */}
       {view === 'tasks' && (
-        <div style={sx.page}>
-          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>Log a task</div>
+        <div style={{ padding: '16px 16px 0' }}>
+          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 14 }}>Log a task</div>
 
-          <div style={sx.card}>
-            <div style={sx.label}>Who did it?</div>
+          <div style={card()}>
+            <div style={{ fontSize: 11, color: P.muted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>Who did it?</div>
             <div style={{ display: 'flex', gap: 8 }}>
               {MEMBERS.map(m => (
-                <button key={m} style={{ ...sx.btn(memberColor[m], submitter !== m), flex: 1, padding: '8px 4px', fontSize: 12 }} onClick={() => setSubmitter(m)}>{m}</button>
+                <button key={m} onClick={() => setSub(m)} style={{
+                  flex: 1, padding: '10px 4px', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                  background: submitter === m ? P[m].main : P[m].light,
+                  color: submitter === m ? '#fff' : P[m].dark,
+                  border: `1.5px solid ${P[m].main}`,
+                }}>{EMOJIS[m]} {m}</button>
               ))}
             </div>
           </div>
 
-          <div style={sx.card}>
-            <div style={sx.label}>Pick the task</div>
-            {['daily', 'weekly', 'biweekly', 'asneeded', 'monthly'].map(type => {
+          <div style={card()}>
+            <div style={{ fontSize: 11, color: P.muted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>Pick the task</div>
+            {['daily','weekly','biweekly','asneeded','monthly'].map(type => {
               const list = TASKS.filter(t => t.type === type)
               if (!list.length) return null
               return (
                 <div key={type}>
-                  <div style={{ fontSize: 10, color: C.muted, marginTop: 12, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 }}>{TYPE_LABEL[type]}</div>
+                  <div style={{ fontSize: 11, color: P.purple, fontWeight: 700, marginTop: 14, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 }}>{TYPE_LABEL[type]}</div>
                   {list.map(t => {
-                    const b = badge(t.points)
+                    const sel = selectedTask === t.id
+                    const pts = t.points
+                    const ptColor = pts >= 3 ? P.Chyna.main : pts === 2 ? P.Joe.main : P.Jet.main
+                    const ptLight = pts >= 3 ? P.Chyna.light : pts === 2 ? P.Joe.light : P.Jet.light
                     return (
-                      <div key={t.id} style={sx.taskRow(selectedTask === t.id)} onClick={() => setTask(t.id)}>
+                      <div key={t.id} onClick={() => setTask(t.id)} style={{
+                        background: sel ? P.purpleLight : P.bg,
+                        border: `1.5px solid ${sel ? P.purple : P.border}`,
+                        borderRadius: 14, padding: '11px 14px', marginBottom: 8,
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      }}>
                         <div>
-                          <div style={{ fontSize: 13 }}>{t.label}</div>
-                          <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>
-                            {t.desc && `${t.desc} · `}👤 {t.who}
-                          </div>
+                          <div style={{ fontSize: 14, fontWeight: sel ? 700 : 400, color: sel ? P.purple : P.text }}>{t.label}</div>
+                          {(t.desc || t.who !== 'all') && (
+                            <div style={{ fontSize: 11, color: P.muted, marginTop: 2 }}>
+                              {t.desc && `${t.desc} · `}👤 {t.who}
+                            </div>
+                          )}
                         </div>
-                        <span style={sx.pill(b.color)}>{b.label} +{t.points}</span>
+                        <span style={pill(ptLight, ptColor)}>+{pts} pt{pts !== 1 ? 's' : ''}</span>
                       </div>
                     )
                   })}
@@ -372,39 +435,46 @@ export default function Home() {
             })}
           </div>
 
-          <button
-            style={{ ...sx.btn(selectedTask ? C.accent : C.muted), width: '100%', padding: 14, fontSize: 15, opacity: selectedTask ? 1 : 0.5 }}
-            onClick={submitTask} disabled={!selectedTask}
-          >
-            Send for Approval →
-          </button>
+          <button onClick={submitTask} disabled={!selectedTask} style={{
+            ...btn(selectedTask ? P.purple : P.border, selectedTask ? '#fff' : P.muted),
+            width: '100%', padding: 16, fontSize: 16, opacity: selectedTask ? 1 : 0.5,
+            borderRadius: 16, marginBottom: 16,
+          }}>Send for approval →</button>
         </div>
       )}
 
-      {/* ── APPROVE ── */}
+      {/* APPROVE */}
       {view === 'approve' && (
-        <div style={sx.page}>
-          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Approve tasks</div>
-          <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>You can only approve someone else's task.</div>
+        <div style={{ padding: '16px 16px 0' }}>
+          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Approve tasks</div>
+          <div style={{ fontSize: 13, color: P.muted, marginBottom: 14 }}>You can only approve someone else's task.</div>
 
           {pending === 0
-            ? <div style={{ ...sx.card, textAlign: 'center', color: C.muted, padding: 32 }}>Nothing waiting for approval 👍</div>
+            ? <div style={{ ...card(), textAlign: 'center', color: P.muted, padding: 40 }}>Nothing waiting 👍</div>
             : state.pendingApprovals.map(p => {
                 const canApprove = p.who !== me
+                const c = P[p.who]
                 return (
-                  <div key={p.id} style={sx.card}>
+                  <div key={p.id} style={card()}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       <div>
-                        <div style={{ fontWeight: 700, color: memberColor[p.who] }}>{p.who}</div>
-                        <div style={{ fontSize: 14, marginTop: 2 }}>{p.taskLabel}</div>
-                        <div style={{ ...sx.pill(C.gold), marginTop: 6 }}>+{p.points} pts</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                          <span style={{ fontSize: 20 }}>{EMOJIS[p.who]}</span>
+                          <span style={{ fontWeight: 800, color: c.main }}>{p.who}</span>
+                        </div>
+                        <div style={{ fontSize: 14, marginBottom: 8 }}>{p.taskLabel}</div>
+                        <span style={pill(c.light, c.dark)}>+{p.points} pts</span>
                       </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        <button style={{ ...sx.btn(C.sage), opacity: canApprove ? 1 : 0.35 }} disabled={!canApprove} onClick={() => approveTask(me, p.id)}>✓ Approve</button>
-                        <button style={{ ...sx.btn(C.accent, true), fontSize: 12 }} onClick={() => rejectTask(p.id)}>✗ Remove</button>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <button
+                          disabled={!canApprove}
+                          onClick={() => approveTask(p.id)}
+                          style={btn(canApprove ? P.Jet.main : P.border, canApprove ? '#fff' : P.muted, { opacity: canApprove ? 1 : 0.4, fontSize: 13 })}
+                        >✓ Approve</button>
+                        <button onClick={() => rejectTask(p.id)} style={btn(P.bg, P.muted, { fontSize: 12, border: `1px solid ${P.border}` })}>Remove</button>
                       </div>
                     </div>
-                    {!canApprove && <div style={{ fontSize: 11, color: C.accent, marginTop: 8 }}>Can't approve your own task — ask {MEMBERS.filter(m => m !== p.who).join(' or ')}</div>}
+                    {!canApprove && <div style={{ fontSize: 12, color: P.Chyna.main, marginTop: 10 }}>Ask {MEMBERS.filter(m => m !== p.who).join(' or ')} to approve this</div>}
                   </div>
                 )
               })
@@ -412,59 +482,67 @@ export default function Home() {
         </div>
       )}
 
-      {/* ── REWARDS ── */}
+      {/* REWARDS */}
       {view === 'rewards' && (
-        <div style={sx.page}>
-          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>Rewards</div>
+        <div style={{ padding: '16px 16px 0' }}>
+          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 14 }}>Rewards</div>
 
-          <div style={sx.card}>
-            <div style={sx.label}>🍬 Daily — just show up</div>
-            <div style={{ fontSize: 13, color: C.muted, marginBottom: 8 }}>Do anything on the list → earn your treat.</div>
+          <div style={card()}>
+            <div style={{ fontSize: 11, color: P.muted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>Daily — just show up</div>
+            <div style={{ fontSize: 13, color: P.muted, marginBottom: 12 }}>Do anything on the task list and earn your treat.</div>
             {MEMBERS.map(m => (
-              <div key={m} style={{ fontSize: 13, marginBottom: 4 }}>
-                <span style={{ color: memberColor[m], fontWeight: 700 }}>{m}:</span> {REWARDS.daily[m]}
+              <div key={m} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, padding: '10px 12px', background: P[m].light, borderRadius: 12 }}>
+                <span style={{ fontSize: 22 }}>{EMOJIS[m]}</span>
+                <div>
+                  <div style={{ fontWeight: 700, color: P[m].dark }}>{m}</div>
+                  <div style={{ fontSize: 13, color: P[m].main }}>{REWARDS.daily[m]}</div>
+                </div>
               </div>
             ))}
           </div>
 
-          <div style={sx.card}>
-            <div style={sx.label}>⭐ Weekly — hit your basics</div>
-            <div style={{ fontSize: 12, color: C.muted, marginBottom: 10 }}>Complete all your must-dos every week → claim your reward on the board.</div>
+          <div style={card()}>
+            <div style={{ fontSize: 11, color: P.muted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>Weekly — hit your must-dos</div>
+            <div style={{ fontSize: 13, color: P.muted, marginBottom: 12 }}>Complete everything on your list each week to claim your reward on the board.</div>
             {MEMBERS.map(m => (
-              <div key={m} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: `1px solid ${C.border}` }}>
-                <div style={{ color: memberColor[m], fontWeight: 700, fontSize: 14 }}>{m}</div>
-                <div style={{ fontSize: 13, margin: '4px 0' }}>{REWARDS.weekly[m]}</div>
-                <div style={{ fontSize: 11, color: C.muted }}>
+              <div key={m} style={{ marginBottom: 14, paddingBottom: 14, borderBottom: `1px solid ${P.border}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <span style={{ fontSize: 20 }}>{EMOJIS[m]}</span>
+                  <span style={{ fontWeight: 800, color: P[m].dark }}>{m}</span>
+                </div>
+                <div style={{ fontSize: 14, color: P[m].main, fontWeight: 600, marginBottom: 6 }}>{REWARDS.weekly[m]}</div>
+                <div style={{ fontSize: 11, color: P.muted }}>
                   Must-dos: {WEEKLY_BASELINE[m].map(tid => TASKS.find(t => t.id === tid)?.label).join(' · ')}
                 </div>
               </div>
             ))}
           </div>
 
-          <div style={{ ...sx.card, borderColor: C.gold + '88' }}>
-            <div style={sx.label}>🎬 Monthly — family goal</div>
-            <div style={{ fontSize: 22, fontWeight: 900, color: C.gold }}>{state.familyPoints} / {FAMILY_GOAL}</div>
-            <div style={sx.bar}><div style={sx.fill(familyPct, C.gold)} /></div>
-            <div style={{ fontSize: 14, marginTop: 10 }}>{REWARDS.monthly}</div>
-            {goalMet && <div style={{ color: C.gold, fontWeight: 700, marginTop: 6 }}>✓ You earned it this month!</div>}
+          <div style={{ ...card(), background: P.goldLight, borderColor: P.gold }}>
+            <div style={{ fontSize: 11, color: P.muted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Monthly — family goal</div>
+            <div style={{ fontSize: 32, fontWeight: 900, color: P.gold }}>{state.familyPoints}<span style={{ fontSize: 16, color: P.muted, fontWeight: 400 }}>/{FAMILY_GOAL}</span></div>
+            <div style={{ height: 10, background: P.border, borderRadius: 99, overflow: 'hidden', margin: '10px 0' }}>
+              <div style={{ height: '100%', width: `${familyPct}%`, background: P.gold, borderRadius: 99, transition: 'width .5s' }} />
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: P.text }}>{REWARDS.monthly}</div>
+            {goalMet && <div style={{ marginTop: 8, fontWeight: 700, color: P.gold }}>You earned it this month!</div>}
           </div>
         </div>
       )}
 
       {/* NAV */}
-      <nav style={sx.nav}>
-        {[
-          { id: 'board',   icon: '🏠', label: 'Board' },
-          { id: 'tasks',   icon: '✅', label: 'Log Task' },
-          { id: 'approve', icon: '👍', label: pending > 0 ? `Approve (${pending})` : 'Approve' },
-          { id: 'rewards', icon: '🎁', label: 'Rewards' },
-        ].map(n => (
-          <button key={n.id} style={sx.navBtn(view === n.id)} onClick={() => setView(n.id)}>
-            <div style={{ fontSize: 20 }}>{n.icon}</div>
+      <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: P.card, borderTop: `1.5px solid ${P.border}`, display: 'flex', zIndex: 100 }}>
+        {navItems.map(n => (
+          <button key={n.id} onClick={() => setView(n.id)} style={{
+            flex: 1, padding: '10px 4px 12px', background: 'none', border: 'none',
+            color: view === n.id ? P.purple : P.muted,
+            fontSize: 10, fontWeight: view === n.id ? 800 : 400, cursor: 'pointer',
+            borderTop: view === n.id ? `3px solid ${P.purple}` : '3px solid transparent',
+          }}>
+            <div style={{ fontSize: 22 }}>{n.icon}</div>
             <div>{n.label}</div>
           </button>
         ))}
       </nav>
     </div>
   )
-}
