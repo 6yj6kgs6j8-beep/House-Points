@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 
 const TASKS = [
@@ -41,25 +41,26 @@ const REWARDS = {
 const MEMBERS = ['Chyna', 'Joe', 'Jet']
 const FAMILY_GOAL = 35
 const EMOJIS = { Chyna: '🌸', Joe: '⚡', Jet: '✨' }
+const TYPE_LABEL = { daily: 'Every day', weekly: 'Every week', biweekly: 'Every two weeks', asneeded: 'As needed', monthly: 'Once a month' }
 
-const PALETTE = {
-  bg:          '#FFF8F0',
-  card:        '#FFFFFF',
-  border:      '#F0E6D8',
-  text:        '#3D2C1E',
-  muted:       '#9E8572',
-  Chyna:       { main: '#D4637A', light: '#FCE8EC', dark: '#8C2D3E' },
-  Joe:         { main: '#E8943A', light: '#FEF0E0', dark: '#8C4A10' },
-  Jet:         { main: '#5BA98B', light: '#E2F4EE', dark: '#2A6650' },
-  gold:        '#F0B429',
-  goldLight:   '#FEF7E0',
-  purple:      '#8B6CC8',
-  purpleLight: '#F0EBFC',
-}
-
-const TYPE_LABEL = {
-  daily: 'Every day', weekly: 'Every week',
-  biweekly: 'Every two weeks', asneeded: 'As needed', monthly: 'Once a month'
+const G = {
+  bg:        '#F5EFE0',
+  paper:     '#FDFAF3',
+  card:      '#FFFDF7',
+  border:    '#D9CEB8',
+  borderDark:'#B8A98A',
+  text:      '#3A2F1E',
+  muted:     '#8C7A5E',
+  Chyna:     { main: '#C45E72', light: '#FAEAED', dark: '#7A2A3A', mid: '#E8A0AD' },
+  Joe:       { main: '#C47A35', light: '#FAF0E0', dark: '#7A4010', mid: '#E8B878' },
+  Jet:       { main: '#4A967A', light: '#E5F4EE', dark: '#1E5C42', mid: '#8ECDB8' },
+  sage:      '#6B8F6B',
+  sageLight: '#E8F0E8',
+  terracotta:'#C4714A',
+  terracottaLight: '#FAE8DF',
+  gold:      '#D4940A',
+  goldLight: '#FDF3D0',
+  cream:     '#F8F2E4',
 }
 
 const DEFAULT_INVENTORY = [
@@ -74,7 +75,7 @@ const DEFAULT_INVENTORY = [
   { id: 'rice',      name: 'Rice',           qty: 0, unit: 'cups',    low: 2, category: 'pantry' },
   { id: 'pasta',     name: 'Pasta',          qty: 0, unit: 'boxes',   low: 1, category: 'pantry' },
   { id: 'canned',    name: 'Canned goods',   qty: 0, unit: 'cans',    low: 2, category: 'pantry' },
-  { id: 'sp_kids',   name: 'Sour Patch Kids',qty: 0, unit: 'bags',   low: 1, category: 'pantry' },
+  { id: 'sp_kids',   name: 'Sour Patch Kids',qty: 0, unit: 'bags',    low: 1, category: 'pantry' },
   { id: 'cookies',   name: 'Cookies',        qty: 0, unit: 'count',   low: 3, category: 'pantry' },
   { id: 'snacks',    name: 'Snacks',         qty: 0, unit: 'count',   low: 3, category: 'pantry' },
 ]
@@ -102,62 +103,42 @@ async function pushState(state) {
   await supabase.from('app_state').upsert({ id: 1, state, updated_at: new Date().toISOString() })
 }
 
+const compressImage = (file) => new Promise((resolve) => {
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d')
+  const img = new Image()
+  img.onload = () => {
+    const size = 160
+    canvas.width = size; canvas.height = size
+    const scale = Math.max(size / img.width, size / img.height)
+    const w = img.width * scale, h = img.height * scale
+    ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h)
+    resolve(canvas.toDataURL('image/jpeg', 0.75))
+  }
+  img.src = URL.createObjectURL(file)
+})
+
 export default function Home() {
-  const [state, setState]       = useState(null)
-  const [view, setView]         = useState('board')
-  const [me, setMe]             = useState(null)
+  const [state, setState]     = useState(null)
+  const [view, setView]       = useState('board')
+  const [me, setMe]           = useState(null)
   const [selectedTask, setTask] = useState(null)
-  const [submitter, setSub]     = useState('Chyna')
-  const [toast, setToast]       = useState(null)
-  const [loading, setLoading]   = useState(true)
-  const [syncing, setSyncing]   = useState(false)
-  const [newItem, setNewItem]   = useState({ name: '', qty: 1, unit: 'count', low: 2, category: 'fridge' })
+  const [submitter, setSub]   = useState('Chyna')
+  const [toast, setToast]     = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [syncing, setSyncing] = useState(false)
+  const [newItem, setNewItem] = useState({ name: '', qty: 1, unit: 'count', low: 2, category: 'fridge' })
   const [showAddItem, setShowAddItem] = useState(false)
   const [extraItem, setExtraItem] = useState('')
-  const [uploadingAvatar, setUploadingAvatar] = useState(false)
-
-  const compressImage = (file) => {
-    return new Promise((resolve) => {
-      const canvas = document.createElement('canvas')
-      const ctx = canvas.getContext('2d')
-      const img = new Image()
-      img.onload = () => {
-        const size = 120
-        canvas.width = size
-        canvas.height = size
-        const scale = Math.max(size / img.width, size / img.height)
-        const w = img.width * scale
-        const h = img.height * scale
-        ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h)
-        resolve(canvas.toDataURL('image/jpeg', 0.7))
-      }
-      img.src = URL.createObjectURL(file)
-    })
-  }
-
-  const handleAvatarUpload = async (member, file) => {
-    if (!file) return
-    setUploadingAvatar(true)
-    try {
-      const compressed = await compressImage(file)
-      update(s => ({
-        ...s,
-        members: { ...s.members, [member]: { ...s.members[member], avatar: compressed } }
-      }))
-      toast$('Photo saved!', 'good')
-    } catch (e) {
-      toast$('Upload failed', 'muted')
-    }
-    setUploadingAvatar(false)
-  }
+  const [showProfile, setShowProfile] = useState(false)
+  const fileRef = useRef()
 
   useEffect(() => {
     fetchState().then(s => {
       const loaded = s || DEFAULT_STATE
       if (!loaded.inventory) loaded.inventory = DEFAULT_INVENTORY
       if (!loaded.groceryExtra) loaded.groceryExtra = []
-      setState(loaded)
-      setLoading(false)
+      setState(loaded); setLoading(false)
     })
     const ch = supabase.channel('sync')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'app_state' }, p => {
@@ -176,18 +157,23 @@ export default function Home() {
   }, [])
 
   const toast$ = (msg, type = 'good') => {
-    setToast({ msg, type })
-    setTimeout(() => setToast(null), 2600)
+    setToast({ msg, type }); setTimeout(() => setToast(null), 2800)
+  }
+
+  const handleAvatarUpload = async (file) => {
+    if (!file || !me || me === 'fridge') return
+    try {
+      const compressed = await compressImage(file)
+      update(s => ({ ...s, members: { ...s.members, [me]: { ...s.members[me], avatar: compressed } } }))
+      toast$('Photo updated!', 'good')
+    } catch { toast$('Upload failed', 'muted') }
   }
 
   const submitTask = () => {
     if (!selectedTask) return
     const task = TASKS.find(t => t.id === selectedTask)
-    const item = { id: Date.now(), who: submitter, taskId: task.id, taskLabel: task.label, points: task.points }
-    update(s => ({ ...s, pendingApprovals: [...s.pendingApprovals, item] }))
-    setTask(null)
-    toast$('Sent for approval! +' + task.points + ' pts pending', 'pending')
-    setView('board')
+    update(s => ({ ...s, pendingApprovals: [...s.pendingApprovals, { id: Date.now(), who: submitter, taskId: task.id, taskLabel: task.label, points: task.points }] }))
+    setTask(null); toast$('Sent for approval! +' + task.points + ' pts', 'pending'); setView('board')
   }
 
   const approveTask = (pendingId) => {
@@ -199,64 +185,43 @@ export default function Home() {
         members: { ...s.members, [item.who]: { ...s.members[item.who], points: s.members[item.who].points + item.points } },
         familyPoints: s.familyPoints + item.points,
         pendingApprovals: s.pendingApprovals.filter(p => p.id !== pendingId),
-        log: [{ text: me + ' approved ' + item.who + ': +' + item.points + ' pt for "' + item.taskLabel + '"', ts: Date.now() }, ...s.log.slice(0, 29)],
+        log: [{ text: me + ' approved ' + item.who + ': +' + item.points + 'pt for "' + item.taskLabel + '"', ts: Date.now() }, ...s.log.slice(0, 29)],
       }
-    })
-    toast$('Points added!', 'good')
+    }); toast$('Approved!', 'good')
   }
 
   const rejectTask = (pendingId) => {
     update(s => ({ ...s, pendingApprovals: s.pendingApprovals.filter(p => p.id !== pendingId) }))
-    toast$('Task removed', 'muted')
+    toast$('Removed', 'muted')
   }
 
   const claimWeeklyReward = (member) => {
     update(s => {
       if (s.members[member].weeklyRewardClaimed) return s
-      return {
-        ...s,
-        members: { ...s.members, [member]: { ...s.members[member], weeklyRewardClaimed: true } },
-        log: [{ text: member + ' claimed their weekly reward', ts: Date.now() }, ...s.log.slice(0, 29)],
-      }
-    })
-    toast$('Enjoy it, ' + member + '!', 'gold')
+      return { ...s, members: { ...s.members, [member]: { ...s.members[member], weeklyRewardClaimed: true } }, log: [{ text: member + ' claimed weekly reward', ts: Date.now() }, ...s.log.slice(0, 29)] }
+    }); toast$('Enjoy it, ' + member + '!', 'gold')
   }
 
   const resetWeek = () => {
     update(s => {
-      const nm = {}
-      MEMBERS.forEach(m => { nm[m] = { ...s.members[m], weeklyRewardClaimed: false } })
+      const nm = {}; MEMBERS.forEach(m => { nm[m] = { ...s.members[m], weeklyRewardClaimed: false } })
       return { ...s, members: nm, week: s.week + 1, log: [{ text: 'Week ' + (s.week + 1) + ' started', ts: Date.now() }, ...s.log.slice(0,29)] }
-    })
-    toast$('New week!', 'good')
+    }); toast$('New week!', 'good')
   }
 
   const resetMonth = () => {
-    update(s => ({
-      ...s, familyPoints: 0, month: s.month + 1,
-      log: [{ text: 'Month ' + (s.month + 1) + ' started', ts: Date.now() }, ...s.log.slice(0,29)],
-    }))
-    toast$('New month started!', 'good')
+    update(s => ({ ...s, familyPoints: 0, month: s.month + 1, log: [{ text: 'Month ' + (s.month + 1) + ' started', ts: Date.now() }, ...s.log.slice(0,29)] }))
+    toast$('New month!', 'good')
   }
 
   const updateQty = (id, delta) => {
-    update(s => ({
-      ...s,
-      inventory: s.inventory.map(item => item.id === id ? { ...item, qty: Math.max(0, item.qty + delta) } : item)
-    }))
+    update(s => ({ ...s, inventory: s.inventory.map(item => item.id === id ? { ...item, qty: Math.max(0, item.qty + delta) } : item) }))
   }
 
   const addInventoryItem = () => {
     if (!newItem.name.trim()) return
-    const item = { ...newItem, id: 'custom_' + Date.now(), qty: Number(newItem.qty), low: Number(newItem.low) }
-    update(s => ({ ...s, inventory: [...s.inventory, item] }))
-    setNewItem({ name: '', qty: 1, unit: 'count', low: 2, category: 'fridge' })
-    setShowAddItem(false)
-    toast$('Item added!', 'good')
-  }
-
-  const removeInventoryItem = (id) => {
-    update(s => ({ ...s, inventory: s.inventory.filter(i => i.id !== id) }))
+    update(s => ({ ...s, inventory: [...s.inventory, { ...newItem, id: 'c_' + Date.now(), qty: Number(newItem.qty), low: Number(newItem.low) }] }))
+    setNewItem({ name: '', qty: 1, unit: 'count', low: 2, category: 'fridge' }); setShowAddItem(false); toast$('Item added!', 'good')
   }
 
   const addExtraGrocery = () => {
@@ -266,159 +231,105 @@ export default function Home() {
   }
 
   const toggleExtraGrocery = (id) => {
-    update(s => ({
-      ...s,
-      groceryExtra: s.groceryExtra.map(i => i.id === id ? { ...i, done: !i.done } : i)
-    }))
+    update(s => ({ ...s, groceryExtra: s.groceryExtra.map(i => i.id === id ? { ...i, done: !i.done } : i) }))
   }
 
   const clearDoneGroceries = () => {
     update(s => ({ ...s, groceryExtra: s.groceryExtra.filter(i => !i.done) }))
   }
 
-  const P = PALETTE
-
-  const card = (extra) => ({
-    background: P.card,
-    border: '1.5px solid ' + P.border,
-    borderRadius: 20,
-    padding: '16px 18px',
-    marginBottom: 14,
-    ...extra,
-  })
-
-  const btn = (bg, color, extra) => ({
-    background: bg,
-    color: color,
-    border: 'none',
-    borderRadius: 14,
-    padding: '10px 18px',
-    fontSize: 14,
-    fontWeight: 700,
-    cursor: 'pointer',
-    ...extra,
-  })
-
-  const pill = (bg, color) => ({
-    display: 'inline-block',
-    background: bg,
-    color: color,
-    borderRadius: 99,
-    padding: '3px 12px',
-    fontSize: 12,
-    fontWeight: 700,
-  })
-
-  const toastColors = {
-    good:    { bg: P.Jet.main,   color: '#fff' },
-    pending: { bg: P.gold,       color: P.text },
-    gold:    { bg: P.purple,     color: '#fff' },
-    muted:   { bg: P.muted,      color: '#fff' },
-  }
-
   const Avatar = ({ member, size = 48 }) => {
     const avatar = state && state.members[member] && state.members[member].avatar
-    const c = P[member]
-    if (avatar) {
-      return (
-        <img src={avatar} alt={member} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', border: '2px solid ' + c.main, flexShrink: 0 }} />
-      )
-    }
+    const c = G[member]
+    if (avatar) return <img src={avatar} alt={member} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', border: '3px solid ' + c.main, flexShrink: 0, boxShadow: '0 2px 8px ' + c.main + '44' }} />
     return (
-      <div style={{ width: size, height: size, borderRadius: '50%', background: c.light, border: '2px solid ' + c.main, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.45, flexShrink: 0 }}>
+      <div style={{ width: size, height: size, borderRadius: '50%', background: c.light, border: '3px solid ' + c.mid, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.42, flexShrink: 0 }}>
         {EMOJIS[member]}
       </div>
     )
   }
 
-  if (!me && !loading && state) {
+  if (loading) return <div style={{ minHeight: '100svh', background: G.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: G.muted, fontFamily: 'Georgia, serif', fontSize: 18 }}>Loading...</div>
+
+  if (!me && state) {
     return (
-      <div style={{ minHeight: '100svh', background: P.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, gap: 14 }}>
-        <div style={{ fontSize: 56 }}>🏡</div>
-        <div style={{ fontSize: 26, fontWeight: 800, color: P.text }}>House Points</div>
-        <div style={{ color: P.muted, fontSize: 15, marginBottom: 4 }}>Who's playing?</div>
-        {MEMBERS.map(m => {
-          const c = P[m]
-          const hasAvatar = state.members[m] && state.members[m].avatar
-          return (
-            <div key={m} style={{ display: 'flex', alignItems: 'center', gap: 10, width: 240 }}>
-              <button onClick={() => setMe(m)} style={{
-                background: c.light, color: c.dark,
-                border: '2px solid ' + c.main,
-                borderRadius: 18, padding: '10px 0', flex: 1,
-                fontSize: 17, fontWeight: 800, cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+      <div style={{ minHeight: '100svh', background: G.bg, fontFamily: 'Georgia, serif', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 28, gap: 0 }}>
+        <div style={{ fontSize: 52, marginBottom: 2 }}>🏡</div>
+        <div style={{ fontSize: 34, fontWeight: 400, color: G.text, letterSpacing: 2, fontFamily: 'Georgia, serif', marginBottom: 4, textShadow: '1px 2px 0px ' + G.border }}>House Points</div>
+        <div style={{ fontSize: 13, color: G.muted, letterSpacing: 3, textTransform: 'uppercase', marginBottom: 28 }}>our little home</div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', maxWidth: 280 }}>
+          {MEMBERS.map(m => {
+            const c = G[m]
+            return (
+              <button key={m} onClick={() => { setMe(m); setView('board') }} style={{
+                background: c.light,
+                border: '2px solid ' + c.mid,
+                borderRadius: 20,
+                padding: '14px 20px',
+                cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 14,
+                boxShadow: '0 3px 0px ' + c.mid,
               }}>
-                <Avatar member={m} size={38} />
-                {m}
-              </button>
-              <label style={{ cursor: 'pointer', flexShrink: 0 }} title={hasAvatar ? 'Change photo' : 'Add photo'}>
-                <div style={{ width: 34, height: 34, borderRadius: 10, background: hasAvatar ? c.light : P.border, border: '1.5px solid ' + (hasAvatar ? c.main : P.border), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>
-                  {uploadingAvatar ? '...' : '📷'}
+                <Avatar member={m} size={46} />
+                <div style={{ textAlign: 'left' }}>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: c.dark, fontFamily: 'Georgia, serif' }}>{m}</div>
+                  <div style={{ fontSize: 11, color: c.main, marginTop: 1 }}>{state.members[m].points} pts · {REWARDS.weekly[m].split(' ').slice(0,3).join(' ')}...</div>
                 </div>
-                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => e.target.files[0] && handleAvatarUpload(m, e.target.files[0])} />
-              </label>
+              </button>
+            )
+          })}
+
+          <div style={{ height: 1, background: G.border, margin: '4px 0' }} />
+
+          <button onClick={() => { setMe('fridge'); setView('fridge') }} style={{
+            background: G.sageLight,
+            border: '2px solid ' + G.sage,
+            borderRadius: 20, padding: '14px 20px', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: 14,
+            boxShadow: '0 3px 0px ' + G.sage + '88',
+          }}>
+            <div style={{ width: 46, height: 46, borderRadius: '50%', background: G.sage + '33', border: '3px solid ' + G.sage, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>🛒</div>
+            <div style={{ textAlign: 'left' }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: G.sage, fontFamily: 'Georgia, serif' }}>Fridge & Grocery</div>
+              <div style={{ fontSize: 11, color: G.muted, marginTop: 1 }}>inventory · shopping list</div>
             </div>
-          )
-        })}
-        <div style={{ width: 240, height: 1, background: P.border, margin: '4px 0' }} />
-        <button onClick={() => { setMe('fridge'); setView('fridge') }} style={{
-          background: P.purpleLight, color: P.purple,
-          border: '2px solid ' + P.purple,
-          borderRadius: 18, padding: '14px 0', width: 240,
-          fontSize: 17, fontWeight: 800, cursor: 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-        }}>
-          <span style={{ fontSize: 24 }}>🛒</span> Fridge &amp; Grocery
-        </button>
+          </button>
+        </div>
+
+        <div style={{ marginTop: 28, fontSize: 11, color: G.muted, letterSpacing: 1 }}>Week {state.week} · Month {state.month}</div>
       </div>
     )
   }
 
-  if (!me) {
-    return <div style={{ minHeight: '100svh', background: P.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: P.muted }}>Loading...</div>
-  }
-
-  if (me === 'fridge' && !loading && state) {
+  if (me === 'fridge' && state) {
     const inventory = state.inventory || DEFAULT_INVENTORY
     const groceryExtra = state.groceryExtra || []
     const lowItems = inventory.filter(i => i.qty <= i.low)
     return (
-      <div style={{ minHeight: '100svh', background: P.bg, color: P.text, fontFamily: 'inherit', paddingBottom: 32 }}>
-        {toast && (
-          <div style={{
-            position: 'fixed', top: 18, left: '50%', transform: 'translateX(-50%)',
-            background: P.Jet.main, color: '#fff',
-            padding: '10px 24px', borderRadius: 99, fontWeight: 700, fontSize: 14,
-            zIndex: 999, boxShadow: '0 4px 24px rgba(0,0,0,0.12)', whiteSpace: 'nowrap',
-          }}>{toast.msg}</div>
-        )}
-        <div style={{ background: P.card, borderBottom: '1.5px solid ' + P.border, padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 50 }}>
-          <div style={{ fontSize: 18, fontWeight: 800 }}>🛒 Fridge &amp; Grocery</div>
-          <button onClick={() => setMe(null)} style={{ background: P.purpleLight, color: P.purple, border: '1.5px solid ' + P.purple, borderRadius: 99, padding: '5px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>← Back</button>
+      <div style={{ minHeight: '100svh', background: G.bg, color: G.text, fontFamily: 'Georgia, serif', paddingBottom: 32 }}>
+        {toast && <div style={{ position: 'fixed', top: 18, left: '50%', transform: 'translateX(-50%)', background: G.sage, color: '#fff', padding: '10px 24px', borderRadius: 99, fontWeight: 700, fontSize: 14, zIndex: 999, boxShadow: '0 4px 16px #0002', whiteSpace: 'nowrap', fontFamily: 'Georgia, serif' }}>{toast.msg}</div>}
+        <div style={{ background: G.paper, borderBottom: '2px solid ' + G.border, padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 50, boxShadow: '0 2px 8px ' + G.border + '88' }}>
+          <div style={{ fontSize: 18, fontWeight: 400, color: G.text, fontFamily: 'Georgia, serif', letterSpacing: 1 }}>🛒 Fridge & Grocery</div>
+          <button onClick={() => setMe(null)} style={{ background: G.sageLight, color: G.sage, border: '1.5px solid ' + G.sage, borderRadius: 99, padding: '5px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'Georgia, serif' }}>← Back</button>
         </div>
-        <div style={{ padding: '16px 16px 0' }}>
-
-          <div style={{ background: P.card, border: '1.5px solid ' + P.border, borderRadius: 20, padding: '16px 18px', marginBottom: 14 }}>
+        <div style={{ padding: '16px' }}>
+          <div style={{ background: G.card, border: '2px solid ' + G.border, borderRadius: 20, padding: '16px 18px', marginBottom: 16, boxShadow: '0 3px 0 ' + G.border }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <div style={{ fontSize: 15, fontWeight: 800 }}>Shopping list</div>
-              {groceryExtra.some(i => i.done) && (
-                <button onClick={clearDoneGroceries} style={{ background: P.border, color: P.muted, border: 'none', borderRadius: 14, padding: '4px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Clear done</button>
-              )}
+              <div style={{ fontSize: 16, fontWeight: 700, color: G.text }}>Shopping list</div>
+              {groceryExtra.some(i => i.done) && <button onClick={clearDoneGroceries} style={{ background: G.cream, color: G.muted, border: '1px solid ' + G.border, borderRadius: 99, padding: '4px 12px', fontSize: 11, cursor: 'pointer' }}>Clear done</button>}
             </div>
-            {lowItems.length === 0 && groceryExtra.length === 0 && (
-              <div style={{ color: P.muted, fontSize: 13, textAlign: 'center', padding: '12px 0' }}>All stocked up!</div>
-            )}
+            {lowItems.length === 0 && groceryExtra.length === 0 && <div style={{ color: G.muted, fontSize: 13, textAlign: 'center', padding: '12px 0' }}>All stocked up! ✨</div>}
             {lowItems.length > 0 && (
               <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 10, color: P.Chyna.main, textTransform: 'uppercase', letterSpacing: 1, fontWeight: 700, marginBottom: 8 }}>Running low</div>
+                <div style={{ fontSize: 10, color: G.Chyna.main, textTransform: 'uppercase', letterSpacing: 1.5, fontWeight: 700, marginBottom: 8 }}>Running low</div>
                 {lowItems.map(item => (
-                  <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid ' + P.border }}>
+                  <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px dashed ' + G.border }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ width: 8, height: 8, borderRadius: 99, background: item.qty === 0 ? P.Chyna.main : P.gold }} />
+                      <div style={{ width: 8, height: 8, borderRadius: 99, background: item.qty === 0 ? G.Chyna.main : G.gold, flexShrink: 0 }} />
                       <span style={{ fontSize: 14 }}>{item.name}</span>
                     </div>
-                    <span style={{ display: 'inline-block', background: item.qty === 0 ? P.Chyna.light : P.goldLight, color: item.qty === 0 ? P.Chyna.main : P.gold, borderRadius: 99, padding: '3px 12px', fontSize: 12, fontWeight: 700 }}>
+                    <span style={{ background: item.qty === 0 ? G.Chyna.light : G.goldLight, color: item.qty === 0 ? G.Chyna.main : G.gold, borderRadius: 99, padding: '2px 10px', fontSize: 11, fontWeight: 700 }}>
                       {item.qty === 0 ? 'Out' : item.qty + ' ' + item.unit + ' left'}
                     </span>
                   </div>
@@ -427,84 +338,79 @@ export default function Home() {
             )}
             {groceryExtra.length > 0 && (
               <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 10, color: P.muted, textTransform: 'uppercase', letterSpacing: 1, fontWeight: 700, marginBottom: 8 }}>Extra items</div>
+                <div style={{ fontSize: 10, color: G.muted, textTransform: 'uppercase', letterSpacing: 1.5, fontWeight: 700, marginBottom: 8 }}>Extra items</div>
                 {groceryExtra.map(i => (
-                  <div key={i.id} onClick={() => toggleExtraGrocery(i.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid ' + P.border, cursor: 'pointer' }}>
-                    <div style={{ width: 20, height: 20, borderRadius: 6, border: '2px solid ' + (i.done ? P.Jet.main : P.border), background: i.done ? P.Jet.main : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      {i.done && <span style={{ color: '#fff', fontSize: 12 }}>✓</span>}
+                  <div key={i.id} onClick={() => toggleExtraGrocery(i.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px dashed ' + G.border, cursor: 'pointer' }}>
+                    <div style={{ width: 20, height: 20, borderRadius: 6, border: '2px solid ' + (i.done ? G.Jet.main : G.border), background: i.done ? G.Jet.main : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      {i.done && <span style={{ color: '#fff', fontSize: 11 }}>✓</span>}
                     </div>
-                    <span style={{ fontSize: 14, textDecoration: i.done ? 'line-through' : 'none', color: i.done ? P.muted : P.text }}>{i.name}</span>
+                    <span style={{ fontSize: 14, textDecoration: i.done ? 'line-through' : 'none', color: i.done ? G.muted : G.text }}>{i.name}</span>
                   </div>
                 ))}
               </div>
             )}
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <input value={extraItem} onChange={e => setExtraItem(e.target.value)} onKeyDown={e => e.key === 'Enter' && addExtraGrocery()} placeholder="Add item to list..." style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: '1.5px solid ' + P.border, background: P.bg, color: P.text, fontSize: 14, outline: 'none' }} />
-              <button onClick={addExtraGrocery} style={{ background: P.purple, color: '#fff', border: 'none', borderRadius: 14, padding: '10px 16px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>Add</button>
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <input value={extraItem} onChange={e => setExtraItem(e.target.value)} onKeyDown={e => e.key === 'Enter' && addExtraGrocery()} placeholder="Add to list..." style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: '1.5px solid ' + G.border, background: G.bg, color: G.text, fontSize: 14, outline: 'none', fontFamily: 'Georgia, serif' }} />
+              <button onClick={addExtraGrocery} style={{ background: G.sage, color: '#fff', border: 'none', borderRadius: 12, padding: '10px 16px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>Add</button>
             </div>
           </div>
 
-          <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 10 }}>Inventory</div>
+          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 10, color: G.text }}>Inventory</div>
           {['fridge', 'pantry'].map(cat => (
-            <div key={cat} style={{ background: P.card, border: '1.5px solid ' + P.border, borderRadius: 20, padding: '16px 18px', marginBottom: 14 }}>
-              <div style={{ fontSize: 11, color: P.purple, textTransform: 'uppercase', letterSpacing: 1, fontWeight: 700, marginBottom: 12 }}>{cat === 'fridge' ? 'Fridge' : 'Pantry'}</div>
+            <div key={cat} style={{ background: G.card, border: '2px solid ' + G.border, borderRadius: 20, padding: '16px 18px', marginBottom: 14, boxShadow: '0 3px 0 ' + G.border }}>
+              <div style={{ fontSize: 11, color: G.sage, textTransform: 'uppercase', letterSpacing: 1.5, fontWeight: 700, marginBottom: 12 }}>{cat === 'fridge' ? '❄️ Fridge' : '🌾 Pantry'}</div>
               {inventory.filter(i => i.category === cat).map(item => {
                 const isLow = item.qty <= item.low
                 return (
-                  <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid ' + P.border }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 14, fontWeight: isLow ? 700 : 400, color: isLow ? P.Chyna.main : P.text }}>{item.name}</div>
-                      <div style={{ fontSize: 11, color: P.muted }}>{item.qty} {item.unit}{isLow ? ' · low' : ''}</div>
+                  <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0', borderBottom: '1px dashed ' + G.border }}>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: isLow ? 700 : 400, color: isLow ? G.Chyna.main : G.text }}>{item.name}</div>
+                      <div style={{ fontSize: 11, color: G.muted }}>{item.qty} {item.unit}{isLow ? ' · low' : ''}</div>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <button onClick={() => updateQty(item.id, -1)} style={{ width: 32, height: 32, borderRadius: 10, border: '1.5px solid ' + P.border, background: P.bg, color: P.text, fontSize: 18, cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>-</button>
-                      <span style={{ fontSize: 16, fontWeight: 800, minWidth: 24, textAlign: 'center', color: isLow ? P.Chyna.main : P.text }}>{item.qty}</span>
-                      <button onClick={() => updateQty(item.id, 1)} style={{ width: 32, height: 32, borderRadius: 10, border: 'none', background: P.purple, color: '#fff', fontSize: 18, cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <button onClick={() => updateQty(item.id, -1)} style={{ width: 32, height: 32, borderRadius: 10, border: '1.5px solid ' + G.border, background: G.bg, color: G.text, fontSize: 18, cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
+                      <span style={{ fontSize: 15, fontWeight: 800, minWidth: 22, textAlign: 'center', color: isLow ? G.Chyna.main : G.text }}>{item.qty}</span>
+                      <button onClick={() => updateQty(item.id, 1)} style={{ width: 32, height: 32, borderRadius: 10, border: 'none', background: G.sage, color: '#fff', fontSize: 18, cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
                     </div>
                   </div>
                 )
               })}
             </div>
           ))}
-
           {showAddItem ? (
-            <div style={{ background: P.card, border: '1.5px solid ' + P.border, borderRadius: 20, padding: '16px 18px', marginBottom: 14 }}>
+            <div style={{ background: G.card, border: '2px solid ' + G.border, borderRadius: 20, padding: '16px 18px', marginBottom: 14 }}>
               <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>New item</div>
-              <input value={newItem.name} onChange={e => setNewItem({ ...newItem, name: e.target.value })} placeholder="Item name" style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: '1.5px solid ' + P.border, background: P.bg, color: P.text, fontSize: 14, marginBottom: 10, outline: 'none', boxSizing: 'border-box' }} />
+              <input value={newItem.name} onChange={e => setNewItem({ ...newItem, name: e.target.value })} placeholder="Item name" style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: '1.5px solid ' + G.border, background: G.bg, color: G.text, fontSize: 14, marginBottom: 10, outline: 'none', boxSizing: 'border-box', fontFamily: 'Georgia, serif' }} />
               <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-                <input type="number" value={newItem.qty} onChange={e => setNewItem({ ...newItem, qty: e.target.value })} placeholder="Qty" style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: '1.5px solid ' + P.border, background: P.bg, color: P.text, fontSize: 14, outline: 'none' }} />
-                <input value={newItem.unit} onChange={e => setNewItem({ ...newItem, unit: e.target.value })} placeholder="Unit" style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: '1.5px solid ' + P.border, background: P.bg, color: P.text, fontSize: 14, outline: 'none' }} />
+                <input type="number" value={newItem.qty} onChange={e => setNewItem({ ...newItem, qty: e.target.value })} placeholder="Qty" style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: '1.5px solid ' + G.border, background: G.bg, color: G.text, fontSize: 14, outline: 'none' }} />
+                <input value={newItem.unit} onChange={e => setNewItem({ ...newItem, unit: e.target.value })} placeholder="Unit" style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: '1.5px solid ' + G.border, background: G.bg, color: G.text, fontSize: 14, outline: 'none' }} />
               </div>
               <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-                <input type="number" value={newItem.low} onChange={e => setNewItem({ ...newItem, low: e.target.value })} placeholder="Low at" style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: '1.5px solid ' + P.border, background: P.bg, color: P.text, fontSize: 14, outline: 'none' }} />
-                <select value={newItem.category} onChange={e => setNewItem({ ...newItem, category: e.target.value })} style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: '1.5px solid ' + P.border, background: P.bg, color: P.text, fontSize: 14, outline: 'none' }}>
+                <input type="number" value={newItem.low} onChange={e => setNewItem({ ...newItem, low: e.target.value })} placeholder="Alert at" style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: '1.5px solid ' + G.border, background: G.bg, color: G.text, fontSize: 14, outline: 'none' }} />
+                <select value={newItem.category} onChange={e => setNewItem({ ...newItem, category: e.target.value })} style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: '1.5px solid ' + G.border, background: G.bg, color: G.text, fontSize: 14, outline: 'none' }}>
                   <option value="fridge">Fridge</option>
                   <option value="pantry">Pantry</option>
                 </select>
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={addInventoryItem} style={{ background: P.purple, color: '#fff', border: 'none', borderRadius: 14, padding: '10px 18px', fontSize: 14, fontWeight: 700, cursor: 'pointer', flex: 1 }}>Add item</button>
-                <button onClick={() => setShowAddItem(false)} style={{ background: P.border, color: P.muted, border: 'none', borderRadius: 14, padding: '10px 18px', fontSize: 14, fontWeight: 700, cursor: 'pointer', flex: 1 }}>Cancel</button>
+                <button onClick={addInventoryItem} style={{ background: G.sage, color: '#fff', border: 'none', borderRadius: 12, padding: '10px 18px', fontSize: 14, fontWeight: 700, cursor: 'pointer', flex: 1 }}>Add</button>
+                <button onClick={() => setShowAddItem(false)} style={{ background: G.cream, color: G.muted, border: '1px solid ' + G.border, borderRadius: 12, padding: '10px 18px', fontSize: 14, cursor: 'pointer', flex: 1 }}>Cancel</button>
               </div>
             </div>
           ) : (
-            <button onClick={() => setShowAddItem(true)} style={{ background: P.purpleLight, color: P.purple, border: '1.5px solid ' + P.purple, borderRadius: 16, padding: 14, width: '100%', fontSize: 14, fontWeight: 700, cursor: 'pointer', marginBottom: 16 }}>
-              + Add new item
-            </button>
+            <button onClick={() => setShowAddItem(true)} style={{ background: G.sageLight, color: G.sage, border: '2px dashed ' + G.sage, borderRadius: 16, padding: 14, width: '100%', fontSize: 14, fontWeight: 700, cursor: 'pointer', marginBottom: 16, fontFamily: 'Georgia, serif' }}>+ Add new item</button>
           )}
         </div>
       </div>
     )
   }
 
-  if (loading || !state) {
-    return <div style={{ minHeight: '100svh', background: P.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: P.muted }}>Loading...</div>
-  }
+  if (!state) return null
 
   const familyPct = Math.min(100, Math.round((state.familyPoints / FAMILY_GOAL) * 100))
   const goalMet   = state.familyPoints >= FAMILY_GOAL
   const pending   = state.pendingApprovals.length
-  const myColor   = P[me]
+  const MC        = G[me] || G.Chyna
   const inventory = state.inventory || DEFAULT_INVENTORY
   const groceryExtra = state.groceryExtra || []
   const lowItems  = inventory.filter(i => i.qty <= i.low)
@@ -516,87 +422,116 @@ export default function Home() {
     { id: 'rewards', icon: '🎁', label: 'Rewards' },
   ]
 
-  return (
-    <div style={{ minHeight: '100svh', background: P.bg, color: P.text, fontFamily: 'inherit', paddingBottom: 80 }}>
-      {toast && (
-        <div style={{
-          position: 'fixed', top: 18, left: '50%', transform: 'translateX(-50%)',
-          background: toastColors[toast.type].bg, color: toastColors[toast.type].color,
-          padding: '10px 24px', borderRadius: 99, fontWeight: 700, fontSize: 14,
-          zIndex: 999, boxShadow: '0 4px 24px rgba(0,0,0,0.12)', whiteSpace: 'nowrap',
-        }}>{toast.msg}</div>
-      )}
+  const card = (extra) => ({ background: G.card, border: '2px solid ' + G.border, borderRadius: 20, padding: '16px 18px', marginBottom: 14, boxShadow: '0 3px 0 ' + G.border, ...extra })
+  const pill = (bg, color) => ({ display: 'inline-block', background: bg, color: color, borderRadius: 99, padding: '3px 12px', fontSize: 12, fontWeight: 700 })
 
-      <div style={{
-        background: P.card, borderBottom: '1.5px solid ' + P.border,
-        padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        position: 'sticky', top: 0, zIndex: 50,
-      }}>
-        <div>
-          <div style={{ fontSize: 18, fontWeight: 800, color: P.text }}>🏡 House Points</div>
-          <div style={{ fontSize: 11, color: P.muted }}>Week {state.week} · Month {state.month}{syncing ? ' · saving...' : ''}</div>
+  const Avatar = ({ member, size = 48 }) => {
+    const avatar = state.members[member] && state.members[member].avatar
+    const c = G[member]
+    if (avatar) return <img src={avatar} alt={member} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', border: '3px solid ' + c.main, flexShrink: 0, boxShadow: '0 2px 8px ' + c.main + '44' }} />
+    return <div style={{ width: size, height: size, borderRadius: '50%', background: c.light, border: '3px solid ' + c.mid, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.42, flexShrink: 0 }}>{EMOJIS[member]}</div>
+  }
+
+  const toastBg = { good: G.Jet.main, pending: G.gold, gold: G.terracotta, muted: G.muted }
+
+  if (showProfile) {
+    return (
+      <div style={{ minHeight: '100svh', background: G.bg, fontFamily: 'Georgia, serif', color: G.text }}>
+        <div style={{ background: G.paper, borderBottom: '2px solid ' + G.border, padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 50, boxShadow: '0 2px 8px ' + G.border + '88' }}>
+          <div style={{ fontSize: 16, fontWeight: 400, letterSpacing: 1 }}>Profile</div>
+          <button onClick={() => setShowProfile(false)} style={{ background: MC.light, color: MC.dark, border: '1.5px solid ' + MC.mid, borderRadius: 99, padding: '5px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Done</button>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 10, color: P.muted }}>Family pot</div>
-            <div style={{ fontSize: 20, fontWeight: 900, color: goalMet ? P.gold : P.text }}>
-              {state.familyPoints}<span style={{ fontSize: 12, color: P.muted, fontWeight: 400 }}>/{FAMILY_GOAL}</span>
-            </div>
+        <div style={{ padding: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
+          <div style={{ position: 'relative' }}>
+            <Avatar member={me} size={110} />
+            <label style={{ position: 'absolute', bottom: 4, right: 4, width: 32, height: 32, borderRadius: '50%', background: MC.main, border: '2px solid ' + G.paper, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 15 }}>
+              📷
+              <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => e.target.files[0] && handleAvatarUpload(e.target.files[0])} />
+            </label>
           </div>
-          <button onClick={() => setMe(null)} style={{
-            background: myColor.light, color: myColor.dark,
-            border: '1.5px solid ' + myColor.main, borderRadius: 99,
-            padding: '4px 12px 4px 4px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: 6,
-          }}>
-            <Avatar member={me} size={26} />
-            {me}
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 26, fontWeight: 700, color: MC.dark }}>{EMOJIS[me]} {me}</div>
+            <div style={{ fontSize: 14, color: G.muted, marginTop: 4 }}>Tap the camera to change your photo</div>
+          </div>
+          <div style={{ ...card(), width: '100%', boxSizing: 'border-box' }}>
+            <div style={{ fontSize: 11, color: G.muted, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 12 }}>Your rewards</div>
+            <div style={{ fontSize: 13, color: G.text, marginBottom: 8 }}>🍬 Daily: <span style={{ color: MC.main, fontWeight: 700 }}>{REWARDS.daily[me]}</span></div>
+            <div style={{ fontSize: 13, color: G.text, marginBottom: 8 }}>⭐ Weekly: <span style={{ color: MC.main, fontWeight: 700 }}>{REWARDS.weekly[me]}</span></div>
+            <div style={{ fontSize: 13, color: G.text }}>🎬 Monthly: <span style={{ color: G.gold, fontWeight: 700 }}>family outing or movie night</span></div>
+          </div>
+          <div style={{ ...card(), width: '100%', boxSizing: 'border-box' }}>
+            <div style={{ fontSize: 11, color: G.muted, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 12 }}>Your must-dos this week</div>
+            {WEEKLY_BASELINE[me].map(tid => {
+              const task = TASKS.find(t => t.id === tid)
+              return task ? <div key={tid} style={{ fontSize: 13, color: G.text, padding: '5px 0', borderBottom: '1px dashed ' + G.border }}>· {task.label}</div> : null
+            })}
+          </div>
+          <button onClick={() => { setMe(null); setShowProfile(false) }} style={{ background: G.cream, color: G.muted, border: '1.5px solid ' + G.border, borderRadius: 16, padding: '12px 0', width: '100%', fontSize: 14, cursor: 'pointer', fontFamily: 'Georgia, serif' }}>Switch person</button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ minHeight: '100svh', background: G.bg, color: G.text, fontFamily: 'Georgia, serif', paddingBottom: 80 }}>
+      {toast && <div style={{ position: 'fixed', top: 18, left: '50%', transform: 'translateX(-50%)', background: toastBg[toast.type] || G.Jet.main, color: '#fff', padding: '10px 24px', borderRadius: 99, fontWeight: 700, fontSize: 14, zIndex: 999, boxShadow: '0 4px 16px #0002', whiteSpace: 'nowrap', fontFamily: 'Georgia, serif' }}>{toast.msg}</div>}
+
+      <div style={{ background: G.paper, borderBottom: '2px solid ' + G.border, padding: '12px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 50, boxShadow: '0 2px 8px ' + G.border + '88' }}>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 400, color: G.text, letterSpacing: 2, fontFamily: 'Georgia, serif' }}>🏡 House Points</div>
+          <div style={{ fontSize: 10, color: G.muted, letterSpacing: 1 }}>week {state.week} · month {state.month}{syncing ? ' · saving...' : ''}</div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 10, color: G.muted }}>family pot</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: goalMet ? G.gold : G.text }}>{state.familyPoints}<span style={{ fontSize: 11, color: G.muted, fontWeight: 400 }}>/{FAMILY_GOAL}</span></div>
+          </div>
+          <button onClick={() => setShowProfile(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}>
+            <Avatar member={me} size={38} />
           </button>
         </div>
       </div>
 
-      {/* BOARD */}
       {view === 'board' && (
         <div style={{ padding: '16px 16px 0' }}>
-          <div style={{ ...card(), background: goalMet ? P.goldLight : P.card, border: '1.5px solid ' + (goalMet ? P.gold : P.border) }}>
-            <div style={{ fontSize: 11, color: P.muted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Family goal — month {state.month}</div>
+          <div style={{ ...card(), background: goalMet ? G.goldLight : G.card, borderColor: goalMet ? G.gold : G.border }}>
+            <div style={{ fontSize: 10, color: G.muted, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 8 }}>Family goal · month {state.month}</div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 10 }}>
-              <span style={{ fontSize: 36, fontWeight: 900, color: goalMet ? P.gold : P.text }}>{state.familyPoints}</span>
-              <span style={{ color: P.muted }}>/ {FAMILY_GOAL} pts</span>
-              {goalMet && <span style={{ ...pill(P.gold, P.text), marginLeft: 4 }}>Goal hit!</span>}
+              <span style={{ fontSize: 38, fontWeight: 700, color: goalMet ? G.gold : G.text }}>{state.familyPoints}</span>
+              <span style={{ color: G.muted, fontSize: 15 }}>/ {FAMILY_GOAL} pts</span>
+              {goalMet && <span style={{ ...pill(G.gold, G.paper), fontSize: 11 }}>Goal hit! 🎉</span>}
             </div>
-            <div style={{ height: 12, background: P.border, borderRadius: 99, overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: familyPct + '%', background: goalMet ? P.gold : P.purple, borderRadius: 99, transition: 'width .5s ease' }} />
+            <div style={{ height: 10, background: G.border, borderRadius: 99, overflow: 'hidden', marginBottom: 14 }}>
+              <div style={{ height: '100%', width: familyPct + '%', background: goalMet ? G.gold : G.terracotta, borderRadius: 99, transition: 'width .5s ease' }} />
             </div>
-            {goalMet && <div style={{ marginTop: 12, fontSize: 14, color: P.text, fontWeight: 600 }}>🎬 {REWARDS.monthly}</div>}
-            <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-              <button onClick={resetWeek} style={btn(P.border, P.muted, { fontSize: 12, padding: '8px 14px' })}>End week</button>
-              {goalMet && <button onClick={resetMonth} style={btn(P.gold, P.text, { fontSize: 12, padding: '8px 14px' })}>Start new month</button>}
+            {goalMet && <div style={{ fontSize: 14, color: G.text, marginBottom: 12 }}>🎬 {REWARDS.monthly}</div>}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={resetWeek} style={{ background: G.cream, color: G.muted, border: '1px solid ' + G.border, borderRadius: 12, padding: '8px 14px', fontSize: 12, cursor: 'pointer', fontFamily: 'Georgia, serif' }}>End week</button>
+              {goalMet && <button onClick={resetMonth} style={{ background: G.gold, color: '#fff', border: 'none', borderRadius: 12, padding: '8px 14px', fontSize: 12, cursor: 'pointer', fontFamily: 'Georgia, serif', fontWeight: 700 }}>Start new month</button>}
             </div>
           </div>
 
           {MEMBERS.map(m => {
-            const mem = state.members[m]
-            const c = P[m]
+            const mem = state.members[m]; const c = G[m]
             return (
-              <div key={m} style={{ ...card(), borderColor: c.main + '55', borderWidth: 2 }}>
+              <div key={m} style={{ ...card(), borderColor: c.mid, borderLeftWidth: 4, borderLeftColor: c.main }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <Avatar member={m} size={48} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <Avatar member={m} size={50} />
                     <div>
-                      <div style={{ fontWeight: 800, fontSize: 16 }}>{m} {m === me && <span style={{ fontSize: 11, color: P.muted, fontWeight: 400 }}>(you)</span>}</div>
-                      <div style={{ fontSize: 12, color: P.muted }}>Weekly: {REWARDS.weekly[m]}</div>
+                      <div style={{ fontWeight: 700, fontSize: 17, color: c.dark }}>{m} {m === me && <span style={{ fontSize: 11, color: G.muted, fontWeight: 400 }}>(you)</span>}</div>
+                      <div style={{ fontSize: 12, color: G.muted, marginTop: 2 }}>Weekly: {REWARDS.weekly[m]}</div>
                     </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: 30, fontWeight: 900, color: c.main }}>{mem.points}</div>
-                    <div style={{ fontSize: 11, color: P.muted }}>pts</div>
+                    <div style={{ fontSize: 32, fontWeight: 700, color: c.main }}>{mem.points}</div>
+                    <div style={{ fontSize: 10, color: G.muted }}>pts</div>
                   </div>
                 </div>
                 <div style={{ marginTop: 12 }}>
                   {!mem.weeklyRewardClaimed
-                    ? <button onClick={() => claimWeeklyReward(m)} style={btn(c.light, c.dark, { fontSize: 12, padding: '8px 14px', border: '1.5px solid ' + c.main })}>Claim weekly reward</button>
-                    : <span style={pill(c.light, c.dark)}>Reward claimed this week</span>
+                    ? <button onClick={() => claimWeeklyReward(m)} style={{ background: c.light, color: c.dark, border: '1.5px solid ' + c.mid, borderRadius: 12, padding: '8px 16px', fontSize: 12, cursor: 'pointer', fontFamily: 'Georgia, serif', fontWeight: 700 }}>Claim weekly reward ✨</button>
+                    : <span style={pill(c.light, c.main)}>✓ Reward claimed this week</span>
                   }
                 </div>
               </div>
@@ -604,11 +539,11 @@ export default function Home() {
           })}
 
           {pending > 0 && (
-            <div style={{ ...card(), borderColor: P.gold }}>
-              <div style={{ fontSize: 11, color: P.muted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Waiting for approval ({pending})</div>
+            <div style={{ ...card(), borderColor: G.gold }}>
+              <div style={{ fontSize: 10, color: G.muted, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 10 }}>Waiting for approval ({pending})</div>
               {state.pendingApprovals.map(p => (
-                <div key={p.id} style={{ fontSize: 13, color: P.muted, padding: '4px 0', borderBottom: '1px solid ' + P.border }}>
-                  <span style={{ color: P[p.who].main, fontWeight: 700 }}>{p.who}</span> · {p.taskLabel} <span style={pill(P.goldLight, P.gold)}>+{p.points}</span>
+                <div key={p.id} style={{ fontSize: 13, color: G.muted, padding: '5px 0', borderBottom: '1px dashed ' + G.border }}>
+                  <span style={{ color: G[p.who].main, fontWeight: 700 }}>{p.who}</span> · {p.taskLabel} <span style={pill(G.goldLight, G.gold)}>+{p.points}</span>
                 </div>
               ))}
             </div>
@@ -616,60 +551,43 @@ export default function Home() {
 
           {state.log.length > 0 && (
             <div style={card()}>
-              <div style={{ fontSize: 11, color: P.muted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Recent activity</div>
-              {state.log.slice(0, 5).map((l, i) => (
-                <div key={i} style={{ fontSize: 12, color: P.muted, padding: '3px 0' }}>· {l.text}</div>
-              ))}
+              <div style={{ fontSize: 10, color: G.muted, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 10 }}>Recent activity</div>
+              {state.log.slice(0, 5).map((l, i) => <div key={i} style={{ fontSize: 12, color: G.muted, padding: '3px 0' }}>· {l.text}</div>)}
             </div>
           )}
         </div>
       )}
 
-      {/* LOG TASK */}
       {view === 'tasks' && (
         <div style={{ padding: '16px 16px 0' }}>
-          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 14 }}>Log a task</div>
+          <div style={{ fontSize: 18, fontWeight: 400, letterSpacing: 1, marginBottom: 16 }}>Log a task</div>
           <div style={card()}>
-            <div style={{ fontSize: 11, color: P.muted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>Who did it?</div>
+            <div style={{ fontSize: 10, color: G.muted, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 12 }}>Who did it?</div>
             <div style={{ display: 'flex', gap: 8 }}>
               {MEMBERS.map(m => (
-                <button key={m} onClick={() => setSub(m)} style={{
-                  flex: 1, padding: '10px 4px', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer',
-                  background: submitter === m ? P[m].main : P[m].light,
-                  color: submitter === m ? '#fff' : P[m].dark,
-                  border: '1.5px solid ' + P[m].main,
-                }}>{EMOJIS[m]} {m}</button>
+                <button key={m} onClick={() => setSub(m)} style={{ flex: 1, padding: '10px 4px', borderRadius: 14, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'Georgia, serif', background: submitter === m ? G[m].main : G[m].light, color: submitter === m ? '#fff' : G[m].dark, border: '2px solid ' + G[m].mid }}>
+                  {EMOJIS[m]} {m}
+                </button>
               ))}
             </div>
           </div>
-
           <div style={card()}>
-            <div style={{ fontSize: 11, color: P.muted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>Pick the task</div>
+            <div style={{ fontSize: 10, color: G.muted, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 10 }}>Pick the task</div>
             {['daily','weekly','biweekly','asneeded','monthly'].map(type => {
-              const list = TASKS.filter(t => t.type === type)
-              if (!list.length) return null
+              const list = TASKS.filter(t => t.type === type); if (!list.length) return null
               return (
                 <div key={type}>
-                  <div style={{ fontSize: 11, color: P.purple, fontWeight: 700, marginTop: 14, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 }}>{TYPE_LABEL[type]}</div>
+                  <div style={{ fontSize: 10, color: G.terracotta, fontWeight: 700, marginTop: 14, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1.5 }}>{TYPE_LABEL[type]}</div>
                   {list.map(t => {
                     const sel = selectedTask === t.id
                     const pts = t.points
-                    const ptColor = pts >= 3 ? P.Chyna.main : pts === 2 ? P.Joe.main : P.Jet.main
-                    const ptLight = pts >= 3 ? P.Chyna.light : pts === 2 ? P.Joe.light : P.Jet.light
+                    const ptColor = pts >= 3 ? G.Chyna.main : pts === 2 ? G.Joe.main : G.Jet.main
+                    const ptLight = pts >= 3 ? G.Chyna.light : pts === 2 ? G.Joe.light : G.Jet.light
                     return (
-                      <div key={t.id} onClick={() => setTask(t.id)} style={{
-                        background: sel ? P.purpleLight : P.bg,
-                        border: '1.5px solid ' + (sel ? P.purple : P.border),
-                        borderRadius: 14, padding: '11px 14px', marginBottom: 8,
-                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      }}>
+                      <div key={t.id} onClick={() => setTask(t.id)} style={{ background: sel ? G.terracottaLight : G.bg, border: '1.5px solid ' + (sel ? G.terracotta : G.border), borderRadius: 14, padding: '11px 14px', marginBottom: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <div>
-                          <div style={{ fontSize: 14, fontWeight: sel ? 700 : 400, color: sel ? P.purple : P.text }}>{t.label}</div>
-                          {(t.desc || t.who !== 'all') && (
-                            <div style={{ fontSize: 11, color: P.muted, marginTop: 2 }}>
-                              {t.desc ? t.desc + ' · ' : ''}👤 {t.who}
-                            </div>
-                          )}
+                          <div style={{ fontSize: 14, fontWeight: sel ? 700 : 400, color: sel ? G.terracotta : G.text }}>{t.label}</div>
+                          {(t.desc || t.who !== 'all') && <div style={{ fontSize: 10, color: G.muted, marginTop: 2 }}>{t.desc ? t.desc + ' · ' : ''}👤 {t.who}</div>}
                         </div>
                         <span style={pill(ptLight, ptColor)}>+{pts} pt{pts !== 1 ? 's' : ''}</span>
                       </div>
@@ -679,45 +597,35 @@ export default function Home() {
               )
             })}
           </div>
-
-          <button onClick={submitTask} disabled={!selectedTask} style={{
-            ...btn(selectedTask ? P.purple : P.border, selectedTask ? '#fff' : P.muted),
-            width: '100%', padding: 16, fontSize: 16, opacity: selectedTask ? 1 : 0.5,
-            borderRadius: 16, marginBottom: 16,
-          }}>Send for approval →</button>
+          <button onClick={submitTask} disabled={!selectedTask} style={{ background: selectedTask ? G.terracotta : G.border, color: selectedTask ? '#fff' : G.muted, border: 'none', borderRadius: 16, padding: 16, width: '100%', fontSize: 16, fontWeight: 700, cursor: selectedTask ? 'pointer' : 'default', opacity: selectedTask ? 1 : 0.5, marginBottom: 16, fontFamily: 'Georgia, serif', boxShadow: selectedTask ? '0 3px 0 ' + G.Chyna.dark + '55' : 'none' }}>Send for approval →</button>
         </div>
       )}
 
-      {/* APPROVE */}
       {view === 'approve' && (
         <div style={{ padding: '16px 16px 0' }}>
-          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Approve tasks</div>
-          <div style={{ fontSize: 13, color: P.muted, marginBottom: 14 }}>You can only approve someone else's task.</div>
+          <div style={{ fontSize: 18, fontWeight: 400, letterSpacing: 1, marginBottom: 4 }}>Approve tasks</div>
+          <div style={{ fontSize: 13, color: G.muted, marginBottom: 16 }}>You can only approve someone else's task.</div>
           {pending === 0
-            ? <div style={{ ...card(), textAlign: 'center', color: P.muted, padding: 40 }}>Nothing waiting 👍</div>
+            ? <div style={{ ...card(), textAlign: 'center', color: G.muted, padding: 40, fontSize: 15 }}>Nothing waiting 🌿</div>
             : state.pendingApprovals.map(p => {
-                const canApprove = p.who !== me
-                const c = P[p.who]
+                const canApprove = p.who !== me; const c = G[p.who]
                 return (
                   <div key={p.id} style={card()}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                          <Avatar member={p.who} size={32} />
-                          <span style={{ fontWeight: 800, color: c.main }}>{p.who}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                          <Avatar member={p.who} size={34} />
+                          <span style={{ fontWeight: 700, color: c.main, fontSize: 16 }}>{p.who}</span>
                         </div>
                         <div style={{ fontSize: 14, marginBottom: 8 }}>{p.taskLabel}</div>
                         <span style={pill(c.light, c.dark)}>+{p.points} pts</span>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        <button disabled={!canApprove} onClick={() => approveTask(p.id)}
-                          style={btn(canApprove ? P.Jet.main : P.border, canApprove ? '#fff' : P.muted, { opacity: canApprove ? 1 : 0.4, fontSize: 13 })}>
-                          Approve
-                        </button>
-                        <button onClick={() => rejectTask(p.id)} style={btn(P.bg, P.muted, { fontSize: 12, border: '1px solid ' + P.border })}>Remove</button>
+                        <button disabled={!canApprove} onClick={() => approveTask(p.id)} style={{ background: canApprove ? G.Jet.main : G.border, color: canApprove ? '#fff' : G.muted, border: 'none', borderRadius: 12, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: canApprove ? 'pointer' : 'default', opacity: canApprove ? 1 : 0.4, fontFamily: 'Georgia, serif' }}>✓ Approve</button>
+                        <button onClick={() => rejectTask(p.id)} style={{ background: G.cream, color: G.muted, border: '1px solid ' + G.border, borderRadius: 12, padding: '8px 16px', fontSize: 12, cursor: 'pointer', fontFamily: 'Georgia, serif' }}>Remove</button>
                       </div>
                     </div>
-                    {!canApprove && <div style={{ fontSize: 12, color: P.Chyna.main, marginTop: 10 }}>Ask {MEMBERS.filter(m => m !== p.who).join(' or ')} to approve this</div>}
+                    {!canApprove && <div style={{ fontSize: 12, color: G.Chyna.main, marginTop: 10 }}>Ask {MEMBERS.filter(m => m !== p.who).join(' or ')} to approve this</div>}
                   </div>
                 )
               })
@@ -725,61 +633,50 @@ export default function Home() {
         </div>
       )}
 
-      {/* REWARDS */}
       {view === 'rewards' && (
         <div style={{ padding: '16px 16px 0' }}>
-          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 14 }}>Rewards</div>
-
+          <div style={{ fontSize: 18, fontWeight: 400, letterSpacing: 1, marginBottom: 16 }}>Rewards</div>
           <div style={card()}>
-            <div style={{ fontSize: 11, color: P.muted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>Daily — just show up</div>
-            <div style={{ fontSize: 13, color: P.muted, marginBottom: 12 }}>Do anything on the task list and earn your treat.</div>
+            <div style={{ fontSize: 10, color: G.muted, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 12 }}>🍬 Daily — just show up</div>
             {MEMBERS.map(m => (
-              <div key={m} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, padding: '10px 12px', background: P[m].light, borderRadius: 12 }}>
-                <Avatar member={m} size={40} />
+              <div key={m} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10, padding: '10px 12px', background: G[m].light, borderRadius: 14 }}>
+                <Avatar member={m} size={38} />
                 <div>
-                  <div style={{ fontWeight: 700, color: P[m].dark }}>{m}</div>
-                  <div style={{ fontSize: 13, color: P[m].main }}>{REWARDS.daily[m]}</div>
+                  <div style={{ fontWeight: 700, color: G[m].dark }}>{m}</div>
+                  <div style={{ fontSize: 13, color: G[m].main }}>{REWARDS.daily[m]}</div>
                 </div>
               </div>
             ))}
           </div>
-
           <div style={card()}>
-            <div style={{ fontSize: 11, color: P.muted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>Weekly — hit your must-dos</div>
-            <div style={{ fontSize: 13, color: P.muted, marginBottom: 12 }}>Complete everything on your list each week to claim your reward.</div>
+            <div style={{ fontSize: 10, color: G.muted, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 12 }}>⭐ Weekly — hit your must-dos</div>
             {MEMBERS.map(m => (
-              <div key={m} style={{ marginBottom: 14, paddingBottom: 14, borderBottom: '1px solid ' + P.border }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                  <Avatar member={m} size={36} />
-                  <span style={{ fontWeight: 800, color: P[m].dark }}>{m}</span>
+              <div key={m} style={{ marginBottom: 14, paddingBottom: 14, borderBottom: '1px dashed ' + G.border }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                  <Avatar member={m} size={34} />
+                  <span style={{ fontWeight: 700, color: G[m].dark }}>{m}</span>
                 </div>
-                <div style={{ fontSize: 14, color: P[m].main, fontWeight: 600, marginBottom: 6 }}>{REWARDS.weekly[m]}</div>
-                <div style={{ fontSize: 11, color: P.muted }}>Must-dos: {WEEKLY_BASELINE[m].map(tid => TASKS.find(t => t.id === tid) && TASKS.find(t => t.id === tid).label).filter(Boolean).join(' · ')}</div>
+                <div style={{ fontSize: 14, color: G[m].main, fontWeight: 600, marginBottom: 5 }}>{REWARDS.weekly[m]}</div>
+                <div style={{ fontSize: 11, color: G.muted }}>{WEEKLY_BASELINE[m].map(tid => TASKS.find(t => t.id === tid) && TASKS.find(t => t.id === tid).label).filter(Boolean).join(' · ')}</div>
               </div>
             ))}
           </div>
-
-          <div style={{ ...card(), background: P.goldLight, borderColor: P.gold }}>
-            <div style={{ fontSize: 11, color: P.muted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Monthly — family goal</div>
-            <div style={{ fontSize: 32, fontWeight: 900, color: P.gold }}>{state.familyPoints}<span style={{ fontSize: 16, color: P.muted, fontWeight: 400 }}>/{FAMILY_GOAL}</span></div>
-            <div style={{ height: 10, background: P.border, borderRadius: 99, overflow: 'hidden', margin: '10px 0' }}>
-              <div style={{ height: '100%', width: familyPct + '%', background: P.gold, borderRadius: 99, transition: 'width .5s' }} />
+          <div style={{ ...card(), background: G.goldLight, borderColor: G.gold }}>
+            <div style={{ fontSize: 10, color: G.muted, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 8 }}>🎬 Monthly — family goal</div>
+            <div style={{ fontSize: 34, fontWeight: 700, color: G.gold }}>{state.familyPoints}<span style={{ fontSize: 16, color: G.muted, fontWeight: 400 }}>/{FAMILY_GOAL}</span></div>
+            <div style={{ height: 10, background: G.border, borderRadius: 99, overflow: 'hidden', margin: '10px 0' }}>
+              <div style={{ height: '100%', width: familyPct + '%', background: G.gold, borderRadius: 99, transition: 'width .5s' }} />
             </div>
-            <div style={{ fontSize: 15, fontWeight: 600, color: P.text }}>{REWARDS.monthly}</div>
-            {goalMet && <div style={{ marginTop: 8, fontWeight: 700, color: P.gold }}>You earned it this month!</div>}
+            <div style={{ fontSize: 15, fontWeight: 600, color: G.text }}>{REWARDS.monthly}</div>
+            {goalMet && <div style={{ marginTop: 8, fontWeight: 700, color: G.gold }}>You earned it this month! 🎉</div>}
           </div>
         </div>
       )}
 
-      <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: P.card, borderTop: '1.5px solid ' + P.border, display: 'flex', zIndex: 100 }}>
+      <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: G.paper, borderTop: '2px solid ' + G.border, display: 'flex', zIndex: 100, boxShadow: '0 -2px 12px ' + G.border + '88' }}>
         {navItems.map(n => (
-          <button key={n.id} onClick={() => setView(n.id)} style={{
-            flex: 1, padding: '10px 4px 12px', background: 'none', border: 'none',
-            color: view === n.id ? P.purple : P.muted,
-            fontSize: 9, fontWeight: view === n.id ? 800 : 400, cursor: 'pointer',
-            borderTop: view === n.id ? '3px solid ' + P.purple : '3px solid transparent',
-          }}>
-            <div style={{ fontSize: 20 }}>{n.icon}</div>
+          <button key={n.id} onClick={() => setView(n.id)} style={{ flex: 1, padding: '10px 4px 12px', background: 'none', border: 'none', color: view === n.id ? G.terracotta : G.muted, fontSize: 9, fontWeight: view === n.id ? 800 : 400, cursor: 'pointer', borderTop: view === n.id ? '3px solid ' + G.terracotta : '3px solid transparent', fontFamily: 'Georgia, serif', letterSpacing: 0.5 }}>
+            <div style={{ fontSize: 21 }}>{n.icon}</div>
             <div>{n.label}</div>
           </button>
         ))}
