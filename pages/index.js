@@ -425,13 +425,6 @@ export default function Home() {
   const card = (extra) => ({ background: G.card, border: '2px solid ' + G.border, borderRadius: 20, padding: '16px 18px', marginBottom: 14, boxShadow: '0 3px 0 ' + G.border, ...extra })
   const pill = (bg, color) => ({ display: 'inline-block', background: bg, color: color, borderRadius: 99, padding: '3px 12px', fontSize: 12, fontWeight: 700 })
 
-  const Avatar = ({ member, size = 48 }) => {
-    const avatar = state.members[member] && state.members[member].avatar
-    const c = G[member]
-    if (avatar) return <img src={avatar} alt={member} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', border: '3px solid ' + c.main, flexShrink: 0, boxShadow: '0 2px 8px ' + c.main + '44' }} />
-    return <div style={{ width: size, height: size, borderRadius: '50%', background: c.light, border: '3px solid ' + c.mid, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.42, flexShrink: 0 }}>{EMOJIS[member]}</div>
-  }
-
   const toastBg = { good: G.Jet.main, pending: G.gold, gold: G.terracotta, muted: G.muted }
 
   if (showProfile) {
