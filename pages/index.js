@@ -40,21 +40,20 @@ const REWARDS = {
 
 const MEMBERS = ['Chyna', 'Joe', 'Jet']
 const FAMILY_GOAL = 35
-
 const EMOJIS = { Chyna: '🌸', Joe: '⚡', Jet: '✨' }
 
 const PALETTE = {
-  bg:       '#FFF8F0',
-  card:     '#FFFFFF',
-  border:   '#F0E6D8',
-  text:     '#3D2C1E',
-  muted:    '#9E8572',
-  Chyna:    { main: '#D4637A', light: '#FCE8EC', dark: '#8C2D3E' },
-  Joe:      { main: '#E8943A', light: '#FEF0E0', dark: '#8C4A10' },
-  Jet:      { main: '#5BA98B', light: '#E2F4EE', dark: '#2A6650' },
-  gold:     '#F0B429',
-  goldLight:'#FEF7E0',
-  purple:   '#8B6CC8',
+  bg:          '#FFF8F0',
+  card:        '#FFFFFF',
+  border:      '#F0E6D8',
+  text:        '#3D2C1E',
+  muted:       '#9E8572',
+  Chyna:       { main: '#D4637A', light: '#FCE8EC', dark: '#8C2D3E' },
+  Joe:         { main: '#E8943A', light: '#FEF0E0', dark: '#8C4A10' },
+  Jet:         { main: '#5BA98B', light: '#E2F4EE', dark: '#2A6650' },
+  gold:        '#F0B429',
+  goldLight:   '#FEF7E0',
+  purple:      '#8B6CC8',
   purpleLight: '#F0EBFC',
 }
 
@@ -63,14 +62,22 @@ const TYPE_LABEL = {
   biweekly: 'Every two weeks', asneeded: 'As needed', monthly: 'Once a month'
 }
 
-async function fetchState() {
-  const { data } = await supabase.from('app_state').select('*').eq('id', 1).single()
-  return data?.state || null
-}
-
-async function pushState(state) {
-  await supabase.from('app_state').upsert({ id: 1, state, updated_at: new Date().toISOString() })
-}
+const DEFAULT_INVENTORY = [
+  { id: 'eggs',      name: 'Eggs',           qty: 0, unit: 'count',   low: 4, category: 'fridge' },
+  { id: 'milk',      name: 'Milk',           qty: 0, unit: 'cups',    low: 2, category: 'fridge' },
+  { id: 'butter',    name: 'Butter',         qty: 0, unit: 'sticks',  low: 1, category: 'fridge' },
+  { id: 'cheese',    name: 'Cheese',         qty: 0, unit: 'slices',  low: 4, category: 'fridge' },
+  { id: 'juice',     name: 'Juice',          qty: 0, unit: 'bottles', low: 1, category: 'fridge' },
+  { id: 'fruit',     name: 'Fruit',          qty: 0, unit: 'count',   low: 3, category: 'fridge' },
+  { id: 'veggies',   name: 'Vegetables',     qty: 0, unit: 'count',   low: 3, category: 'fridge' },
+  { id: 'bread',     name: 'Bread',          qty: 0, unit: 'slices',  low: 4, category: 'pantry' },
+  { id: 'rice',      name: 'Rice',           qty: 0, unit: 'cups',    low: 2, category: 'pantry' },
+  { id: 'pasta',     name: 'Pasta',          qty: 0, unit: 'boxes',   low: 1, category: 'pantry' },
+  { id: 'canned',    name: 'Canned goods',   qty: 0, unit: 'cans',    low: 2, category: 'pantry' },
+  { id: 'sp_kids',   name: 'Sour Patch Kids',qty: 0, unit: 'bags',   low: 1, category: 'pantry' },
+  { id: 'cookies',   name: 'Cookies',        qty: 0, unit: 'count',   low: 3, category: 'pantry' },
+  { id: 'snacks',    name: 'Snacks',         qty: 0, unit: 'count',   low: 3, category: 'pantry' },
+]
 
 const DEFAULT_STATE = {
   week: 1, month: 1,
@@ -82,6 +89,17 @@ const DEFAULT_STATE = {
   familyPoints: 15,
   pendingApprovals: [],
   log: [],
+  inventory: DEFAULT_INVENTORY,
+  groceryExtra: [],
+}
+
+async function fetchState() {
+  const { data } = await supabase.from('app_state').select('*').eq('id', 1).single()
+  return data?.state || null
+}
+
+async function pushState(state) {
+  await supabase.from('app_state').upsert({ id: 1, state, updated_at: new Date().toISOString() })
 }
 
 export default function Home() {
@@ -93,9 +111,18 @@ export default function Home() {
   const [toast, setToast]       = useState(null)
   const [loading, setLoading]   = useState(true)
   const [syncing, setSyncing]   = useState(false)
+  const [newItem, setNewItem]   = useState({ name: '', qty: 1, unit: 'count', low: 2, category: 'fridge' })
+  const [showAddItem, setShowAddItem] = useState(false)
+  const [extraItem, setExtraItem] = useState('')
 
   useEffect(() => {
-    fetchState().then(s => { setState(s || DEFAULT_STATE); setLoading(false) })
+    fetchState().then(s => {
+      const loaded = s || DEFAULT_STATE
+      if (!loaded.inventory) loaded.inventory = DEFAULT_INVENTORY
+      if (!loaded.groceryExtra) loaded.groceryExtra = []
+      setState(loaded)
+      setLoading(false)
+    })
     const ch = supabase.channel('sync')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'app_state' }, p => {
         if (p.new?.state) setState(p.new.state)
@@ -123,7 +150,7 @@ export default function Home() {
     const item = { id: Date.now(), who: submitter, taskId: task.id, taskLabel: task.label, points: task.points }
     update(s => ({ ...s, pendingApprovals: [...s.pendingApprovals, item] }))
     setTask(null)
-    toast$(`Sent for approval! +${task.points} pts pending`, 'pending')
+    toast$('Sent for approval! +' + task.points + ' pts pending', 'pending')
     setView('board')
   }
 
@@ -136,7 +163,7 @@ export default function Home() {
         members: { ...s.members, [item.who]: { ...s.members[item.who], points: s.members[item.who].points + item.points } },
         familyPoints: s.familyPoints + item.points,
         pendingApprovals: s.pendingApprovals.filter(p => p.id !== pendingId),
-        log: [{ text: `${me} approved ${item.who}: +${item.points} pt for "${item.taskLabel}"`, ts: Date.now() }, ...s.log.slice(0, 29)],
+        log: [{ text: me + ' approved ' + item.who + ': +' + item.points + ' pt for "' + item.taskLabel + '"', ts: Date.now() }, ...s.log.slice(0, 29)],
       }
     })
     toast$('Points added!', 'good')
@@ -153,17 +180,17 @@ export default function Home() {
       return {
         ...s,
         members: { ...s.members, [member]: { ...s.members[member], weeklyRewardClaimed: true } },
-        log: [{ text: `${member} claimed their weekly reward`, ts: Date.now() }, ...s.log.slice(0, 29)],
+        log: [{ text: member + ' claimed their weekly reward', ts: Date.now() }, ...s.log.slice(0, 29)],
       }
     })
-    toast$(`Enjoy it, ${member}!`, 'gold')
+    toast$('Enjoy it, ' + member + '!', 'gold')
   }
 
   const resetWeek = () => {
     update(s => {
       const nm = {}
       MEMBERS.forEach(m => { nm[m] = { ...s.members[m], weeklyRewardClaimed: false } })
-      return { ...s, members: nm, week: s.week + 1, log: [{ text: `Week ${s.week + 1} started`, ts: Date.now() }, ...s.log.slice(0,29)] }
+      return { ...s, members: nm, week: s.week + 1, log: [{ text: 'Week ' + (s.week + 1) + ' started', ts: Date.now() }, ...s.log.slice(0,29)] }
     })
     toast$('New week!', 'good')
   }
@@ -171,25 +198,62 @@ export default function Home() {
   const resetMonth = () => {
     update(s => ({
       ...s, familyPoints: 0, month: s.month + 1,
-      log: [{ text: `Month ${s.month + 1} — points reset`, ts: Date.now() }, ...s.log.slice(0,29)],
+      log: [{ text: 'Month ' + (s.month + 1) + ' started', ts: Date.now() }, ...s.log.slice(0,29)],
     }))
     toast$('New month started!', 'good')
   }
 
+  const updateQty = (id, delta) => {
+    update(s => ({
+      ...s,
+      inventory: s.inventory.map(item => item.id === id ? { ...item, qty: Math.max(0, item.qty + delta) } : item)
+    }))
+  }
+
+  const addInventoryItem = () => {
+    if (!newItem.name.trim()) return
+    const item = { ...newItem, id: 'custom_' + Date.now(), qty: Number(newItem.qty), low: Number(newItem.low) }
+    update(s => ({ ...s, inventory: [...s.inventory, item] }))
+    setNewItem({ name: '', qty: 1, unit: 'count', low: 2, category: 'fridge' })
+    setShowAddItem(false)
+    toast$('Item added!', 'good')
+  }
+
+  const removeInventoryItem = (id) => {
+    update(s => ({ ...s, inventory: s.inventory.filter(i => i.id !== id) }))
+  }
+
+  const addExtraGrocery = () => {
+    if (!extraItem.trim()) return
+    update(s => ({ ...s, groceryExtra: [...(s.groceryExtra || []), { id: Date.now(), name: extraItem.trim(), done: false }] }))
+    setExtraItem('')
+  }
+
+  const toggleExtraGrocery = (id) => {
+    update(s => ({
+      ...s,
+      groceryExtra: s.groceryExtra.map(i => i.id === id ? { ...i, done: !i.done } : i)
+    }))
+  }
+
+  const clearDoneGroceries = () => {
+    update(s => ({ ...s, groceryExtra: s.groceryExtra.filter(i => !i.done) }))
+  }
+
   const P = PALETTE
 
-  const card = (extra = {}) => ({
+  const card = (extra) => ({
     background: P.card,
-    border: `1.5px solid ${P.border}`,
+    border: '1.5px solid ' + P.border,
     borderRadius: 20,
     padding: '16px 18px',
     marginBottom: 14,
     ...extra,
   })
 
-  const btn = (bg, color, extra = {}) => ({
+  const btn = (bg, color, extra) => ({
     background: bg,
-    color,
+    color: color,
     border: 'none',
     borderRadius: 14,
     padding: '10px 18px',
@@ -202,7 +266,7 @@ export default function Home() {
   const pill = (bg, color) => ({
     display: 'inline-block',
     background: bg,
-    color,
+    color: color,
     borderRadius: 99,
     padding: '3px 12px',
     fontSize: 12,
@@ -210,10 +274,10 @@ export default function Home() {
   })
 
   const toastColors = {
-    good: { bg: P.Jet.main, color: '#fff' },
-    pending: { bg: P.gold, color: P.text },
-    gold: { bg: P.purple, color: '#fff' },
-    muted: { bg: P.muted, color: '#fff' },
+    good:    { bg: P.Jet.main,   color: '#fff' },
+    pending: { bg: P.gold,       color: P.text },
+    gold:    { bg: P.purple,     color: '#fff' },
+    muted:   { bg: P.muted,      color: '#fff' },
   }
 
   if (!me) {
@@ -226,19 +290,11 @@ export default function Home() {
           const c = P[m]
           return (
             <button key={m} onClick={() => setMe(m)} style={{
-              background: c.light,
-              color: c.dark,
-              border: `2px solid ${c.main}`,
-              borderRadius: 18,
-              padding: '14px 0',
-              width: 220,
-              fontSize: 18,
-              fontWeight: 800,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 10,
+              background: c.light, color: c.dark,
+              border: '2px solid ' + c.main,
+              borderRadius: 18, padding: '14px 0', width: 220,
+              fontSize: 18, fontWeight: 800, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
             }}>
               <span style={{ fontSize: 24 }}>{EMOJIS[m]}</span> {m}
             </button>
@@ -256,11 +312,15 @@ export default function Home() {
   const goalMet   = state.familyPoints >= FAMILY_GOAL
   const pending   = state.pendingApprovals.length
   const myColor   = P[me]
+  const inventory = state.inventory || DEFAULT_INVENTORY
+  const groceryExtra = state.groceryExtra || []
+  const lowItems  = inventory.filter(i => i.qty <= i.low)
 
   const navItems = [
     { id: 'board',   icon: '🏠', label: 'Home' },
     { id: 'tasks',   icon: '✅', label: 'Log Task' },
-    { id: 'approve', icon: '👍', label: pending > 0 ? `Approve (${pending})` : 'Approve' },
+    { id: 'approve', icon: '👍', label: pending > 0 ? 'Approve (' + pending + ')' : 'Approve' },
+    { id: 'fridge',  icon: '🛒', label: 'Fridge' },
     { id: 'rewards', icon: '🎁', label: 'Rewards' },
   ]
 
@@ -275,9 +335,8 @@ export default function Home() {
         }}>{toast.msg}</div>
       )}
 
-      {/* HEADER */}
       <div style={{
-        background: P.card, borderBottom: `1.5px solid ${P.border}`,
+        background: P.card, borderBottom: '1.5px solid ' + P.border,
         padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         position: 'sticky', top: 0, zIndex: 50,
       }}>
@@ -294,7 +353,7 @@ export default function Home() {
           </div>
           <button onClick={() => setMe(null)} style={{
             background: myColor.light, color: myColor.dark,
-            border: `1.5px solid ${myColor.main}`, borderRadius: 99,
+            border: '1.5px solid ' + myColor.main, borderRadius: 99,
             padding: '5px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
           }}>{EMOJIS[me]} {me}</button>
         </div>
@@ -303,17 +362,15 @@ export default function Home() {
       {/* BOARD */}
       {view === 'board' && (
         <div style={{ padding: '16px 16px 0' }}>
-
-          {/* Family goal */}
-          <div style={{ ...card(), background: goalMet ? P.goldLight : P.card, border: `1.5px solid ${goalMet ? P.gold : P.border}` }}>
+          <div style={{ ...card(), background: goalMet ? P.goldLight : P.card, border: '1.5px solid ' + (goalMet ? P.gold : P.border) }}>
             <div style={{ fontSize: 11, color: P.muted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Family goal — month {state.month}</div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 10 }}>
               <span style={{ fontSize: 36, fontWeight: 900, color: goalMet ? P.gold : P.text }}>{state.familyPoints}</span>
               <span style={{ color: P.muted }}>/ {FAMILY_GOAL} pts</span>
-              {goalMet && <span style={{ ...pill(P.gold, P.text), marginLeft: 4 }}>Goal hit! 🎉</span>}
+              {goalMet && <span style={{ ...pill(P.gold, P.text), marginLeft: 4 }}>Goal hit!</span>}
             </div>
             <div style={{ height: 12, background: P.border, borderRadius: 99, overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${familyPct}%`, background: goalMet ? P.gold : P.purple, borderRadius: 99, transition: 'width .5s ease' }} />
+              <div style={{ height: '100%', width: familyPct + '%', background: goalMet ? P.gold : P.purple, borderRadius: 99, transition: 'width .5s ease' }} />
             </div>
             {goalMet && <div style={{ marginTop: 12, fontSize: 14, color: P.text, fontWeight: 600 }}>🎬 {REWARDS.monthly}</div>}
             <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
@@ -322,7 +379,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Members */}
           {MEMBERS.map(m => {
             const mem = state.members[m]
             const c = P[m]
@@ -343,29 +399,25 @@ export default function Home() {
                 </div>
                 <div style={{ marginTop: 12 }}>
                   {!mem.weeklyRewardClaimed
-                    ? <button onClick={() => claimWeeklyReward(m)} style={btn(c.light, c.dark, { fontSize: 12, padding: '8px 14px', border: `1.5px solid ${c.main}` })}>
-                        Claim weekly reward
-                      </button>
-                    : <span style={pill(c.light, c.dark)}>✓ Reward claimed this week</span>
+                    ? <button onClick={() => claimWeeklyReward(m)} style={btn(c.light, c.dark, { fontSize: 12, padding: '8px 14px', border: '1.5px solid ' + c.main })}>Claim weekly reward</button>
+                    : <span style={pill(c.light, c.dark)}>Reward claimed this week</span>
                   }
                 </div>
               </div>
             )
           })}
 
-          {/* Pending */}
           {pending > 0 && (
             <div style={{ ...card(), borderColor: P.gold }}>
               <div style={{ fontSize: 11, color: P.muted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Waiting for approval ({pending})</div>
               {state.pendingApprovals.map(p => (
-                <div key={p.id} style={{ fontSize: 13, color: P.muted, padding: '4px 0', borderBottom: `1px solid ${P.border}` }}>
+                <div key={p.id} style={{ fontSize: 13, color: P.muted, padding: '4px 0', borderBottom: '1px solid ' + P.border }}>
                   <span style={{ color: P[p.who].main, fontWeight: 700 }}>{p.who}</span> · {p.taskLabel} <span style={pill(P.goldLight, P.gold)}>+{p.points}</span>
                 </div>
               ))}
             </div>
           )}
 
-          {/* Log */}
           {state.log.length > 0 && (
             <div style={card()}>
               <div style={{ fontSize: 11, color: P.muted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Recent activity</div>
@@ -381,7 +433,6 @@ export default function Home() {
       {view === 'tasks' && (
         <div style={{ padding: '16px 16px 0' }}>
           <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 14 }}>Log a task</div>
-
           <div style={card()}>
             <div style={{ fontSize: 11, color: P.muted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>Who did it?</div>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -390,7 +441,7 @@ export default function Home() {
                   flex: 1, padding: '10px 4px', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer',
                   background: submitter === m ? P[m].main : P[m].light,
                   color: submitter === m ? '#fff' : P[m].dark,
-                  border: `1.5px solid ${P[m].main}`,
+                  border: '1.5px solid ' + P[m].main,
                 }}>{EMOJIS[m]} {m}</button>
               ))}
             </div>
@@ -412,7 +463,7 @@ export default function Home() {
                     return (
                       <div key={t.id} onClick={() => setTask(t.id)} style={{
                         background: sel ? P.purpleLight : P.bg,
-                        border: `1.5px solid ${sel ? P.purple : P.border}`,
+                        border: '1.5px solid ' + (sel ? P.purple : P.border),
                         borderRadius: 14, padding: '11px 14px', marginBottom: 8,
                         cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                       }}>
@@ -420,7 +471,7 @@ export default function Home() {
                           <div style={{ fontSize: 14, fontWeight: sel ? 700 : 400, color: sel ? P.purple : P.text }}>{t.label}</div>
                           {(t.desc || t.who !== 'all') && (
                             <div style={{ fontSize: 11, color: P.muted, marginTop: 2 }}>
-                              {t.desc && `${t.desc} · `}👤 {t.who}
+                              {t.desc ? t.desc + ' · ' : ''}👤 {t.who}
                             </div>
                           )}
                         </div>
@@ -446,7 +497,6 @@ export default function Home() {
         <div style={{ padding: '16px 16px 0' }}>
           <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Approve tasks</div>
           <div style={{ fontSize: 13, color: P.muted, marginBottom: 14 }}>You can only approve someone else's task.</div>
-
           {pending === 0
             ? <div style={{ ...card(), textAlign: 'center', color: P.muted, padding: 40 }}>Nothing waiting 👍</div>
             : state.pendingApprovals.map(p => {
@@ -464,12 +514,11 @@ export default function Home() {
                         <span style={pill(c.light, c.dark)}>+{p.points} pts</span>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        <button
-                          disabled={!canApprove}
-                          onClick={() => approveTask(p.id)}
-                          style={btn(canApprove ? P.Jet.main : P.border, canApprove ? '#fff' : P.muted, { opacity: canApprove ? 1 : 0.4, fontSize: 13 })}
-                        >✓ Approve</button>
-                        <button onClick={() => rejectTask(p.id)} style={btn(P.bg, P.muted, { fontSize: 12, border: `1px solid ${P.border}` })}>Remove</button>
+                        <button disabled={!canApprove} onClick={() => approveTask(p.id)}
+                          style={btn(canApprove ? P.Jet.main : P.border, canApprove ? '#fff' : P.muted, { opacity: canApprove ? 1 : 0.4, fontSize: 13 })}>
+                          Approve
+                        </button>
+                        <button onClick={() => rejectTask(p.id)} style={btn(P.bg, P.muted, { fontSize: 12, border: '1px solid ' + P.border })}>Remove</button>
                       </div>
                     </div>
                     {!canApprove && <div style={{ fontSize: 12, color: P.Chyna.main, marginTop: 10 }}>Ask {MEMBERS.filter(m => m !== p.who).join(' or ')} to approve this</div>}
@@ -477,6 +526,135 @@ export default function Home() {
                 )
               })
           }
+        </div>
+      )}
+
+      {/* FRIDGE + GROCERY */}
+      {view === 'fridge' && (
+        <div style={{ padding: '16px 16px 0' }}>
+
+          {/* GROCERY LIST */}
+          <div style={card()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div style={{ fontSize: 15, fontWeight: 800 }}>Shopping list</div>
+              {groceryExtra.some(i => i.done) && (
+                <button onClick={clearDoneGroceries} style={btn(P.border, P.muted, { fontSize: 11, padding: '4px 10px' })}>Clear done</button>
+              )}
+            </div>
+
+            {lowItems.length === 0 && groceryExtra.length === 0 && (
+              <div style={{ color: P.muted, fontSize: 13, textAlign: 'center', padding: '12px 0' }}>All stocked up!</div>
+            )}
+
+            {lowItems.length > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 10, color: P.Chyna.main, textTransform: 'uppercase', letterSpacing: 1, fontWeight: 700, marginBottom: 8 }}>Running low</div>
+                {lowItems.map(item => (
+                  <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid ' + P.border }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: 99, background: item.qty === 0 ? P.Chyna.main : P.gold }} />
+                      <span style={{ fontSize: 14 }}>{item.name}</span>
+                    </div>
+                    <span style={pill(item.qty === 0 ? P.Chyna.light : P.goldLight, item.qty === 0 ? P.Chyna.main : P.gold)}>
+                      {item.qty === 0 ? 'Out' : item.qty + ' ' + item.unit + ' left'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {groceryExtra.length > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 10, color: P.muted, textTransform: 'uppercase', letterSpacing: 1, fontWeight: 700, marginBottom: 8 }}>Extra items</div>
+                {groceryExtra.map(i => (
+                  <div key={i.id} onClick={() => toggleExtraGrocery(i.id)} style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0',
+                    borderBottom: '1px solid ' + P.border, cursor: 'pointer',
+                  }}>
+                    <div style={{
+                      width: 20, height: 20, borderRadius: 6, border: '2px solid ' + (i.done ? P.Jet.main : P.border),
+                      background: i.done ? P.Jet.main : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                    }}>
+                      {i.done && <span style={{ color: '#fff', fontSize: 12 }}>✓</span>}
+                    </div>
+                    <span style={{ fontSize: 14, textDecoration: i.done ? 'line-through' : 'none', color: i.done ? P.muted : P.text }}>{i.name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <input
+                value={extraItem}
+                onChange={e => setExtraItem(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && addExtraGrocery()}
+                placeholder="Add item to list..."
+                style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: '1.5px solid ' + P.border, background: P.bg, color: P.text, fontSize: 14, outline: 'none' }}
+              />
+              <button onClick={addExtraGrocery} style={btn(P.purple, '#fff', { padding: '10px 16px' })}>Add</button>
+            </div>
+          </div>
+
+          {/* INVENTORY */}
+          <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 10 }}>Inventory</div>
+
+          {['fridge', 'pantry'].map(cat => (
+            <div key={cat} style={card()}>
+              <div style={{ fontSize: 11, color: P.purple, textTransform: 'uppercase', letterSpacing: 1, fontWeight: 700, marginBottom: 12 }}>
+                {cat === 'fridge' ? 'Fridge' : 'Pantry'}
+              </div>
+              {inventory.filter(i => i.category === cat).map(item => {
+                const isLow = item.qty <= item.low
+                return (
+                  <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid ' + P.border }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontWeight: isLow ? 700 : 400, color: isLow ? P.Chyna.main : P.text }}>{item.name}</div>
+                      <div style={{ fontSize: 11, color: P.muted }}>{item.qty} {item.unit} {isLow ? '· low' : ''}</div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <button onClick={() => updateQty(item.id, -1)} style={{
+                        width: 32, height: 32, borderRadius: 10, border: '1.5px solid ' + P.border,
+                        background: P.bg, color: P.text, fontSize: 18, cursor: 'pointer', fontWeight: 700,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>-</button>
+                      <span style={{ fontSize: 16, fontWeight: 800, minWidth: 24, textAlign: 'center', color: isLow ? P.Chyna.main : P.text }}>{item.qty}</span>
+                      <button onClick={() => updateQty(item.id, 1)} style={{
+                        width: 32, height: 32, borderRadius: 10, border: 'none',
+                        background: P.purple, color: '#fff', fontSize: 18, cursor: 'pointer', fontWeight: 700,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>+</button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ))}
+
+          {showAddItem ? (
+            <div style={card()}>
+              <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>New item</div>
+              <input value={newItem.name} onChange={e => setNewItem({ ...newItem, name: e.target.value })} placeholder="Item name" style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: '1.5px solid ' + P.border, background: P.bg, color: P.text, fontSize: 14, marginBottom: 10, outline: 'none', boxSizing: 'border-box' }} />
+              <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                <input type="number" value={newItem.qty} onChange={e => setNewItem({ ...newItem, qty: e.target.value })} placeholder="Qty" style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: '1.5px solid ' + P.border, background: P.bg, color: P.text, fontSize: 14, outline: 'none' }} />
+                <input value={newItem.unit} onChange={e => setNewItem({ ...newItem, unit: e.target.value })} placeholder="Unit" style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: '1.5px solid ' + P.border, background: P.bg, color: P.text, fontSize: 14, outline: 'none' }} />
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+                <input type="number" value={newItem.low} onChange={e => setNewItem({ ...newItem, low: e.target.value })} placeholder="Low at" style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: '1.5px solid ' + P.border, background: P.bg, color: P.text, fontSize: 14, outline: 'none' }} />
+                <select value={newItem.category} onChange={e => setNewItem({ ...newItem, category: e.target.value })} style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: '1.5px solid ' + P.border, background: P.bg, color: P.text, fontSize: 14, outline: 'none' }}>
+                  <option value="fridge">Fridge</option>
+                  <option value="pantry">Pantry</option>
+                </select>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={addInventoryItem} style={btn(P.purple, '#fff', { flex: 1 })}>Add item</button>
+                <button onClick={() => setShowAddItem(false)} style={btn(P.border, P.muted, { flex: 1 })}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => setShowAddItem(true)} style={{ ...btn(P.purpleLight, P.purple), width: '100%', marginBottom: 16, borderRadius: 16, padding: 14, border: '1.5px solid ' + P.purple }}>
+              + Add new item
+            </button>
+          )}
         </div>
       )}
 
@@ -501,17 +679,15 @@ export default function Home() {
 
           <div style={card()}>
             <div style={{ fontSize: 11, color: P.muted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>Weekly — hit your must-dos</div>
-            <div style={{ fontSize: 13, color: P.muted, marginBottom: 12 }}>Complete everything on your list each week to claim your reward on the board.</div>
+            <div style={{ fontSize: 13, color: P.muted, marginBottom: 12 }}>Complete everything on your list each week to claim your reward.</div>
             {MEMBERS.map(m => (
-              <div key={m} style={{ marginBottom: 14, paddingBottom: 14, borderBottom: `1px solid ${P.border}` }}>
+              <div key={m} style={{ marginBottom: 14, paddingBottom: 14, borderBottom: '1px solid ' + P.border }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                   <span style={{ fontSize: 20 }}>{EMOJIS[m]}</span>
                   <span style={{ fontWeight: 800, color: P[m].dark }}>{m}</span>
                 </div>
                 <div style={{ fontSize: 14, color: P[m].main, fontWeight: 600, marginBottom: 6 }}>{REWARDS.weekly[m]}</div>
-                <div style={{ fontSize: 11, color: P.muted }}>
-                  Must-dos: {WEEKLY_BASELINE[m].map(tid => TASKS.find(t => t.id === tid)?.label).join(' · ')}
-                </div>
+                <div style={{ fontSize: 11, color: P.muted }}>Must-dos: {WEEKLY_BASELINE[m].map(tid => TASKS.find(t => t.id === tid) && TASKS.find(t => t.id === tid).label).filter(Boolean).join(' · ')}</div>
               </div>
             ))}
           </div>
@@ -520,7 +696,7 @@ export default function Home() {
             <div style={{ fontSize: 11, color: P.muted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Monthly — family goal</div>
             <div style={{ fontSize: 32, fontWeight: 900, color: P.gold }}>{state.familyPoints}<span style={{ fontSize: 16, color: P.muted, fontWeight: 400 }}>/{FAMILY_GOAL}</span></div>
             <div style={{ height: 10, background: P.border, borderRadius: 99, overflow: 'hidden', margin: '10px 0' }}>
-              <div style={{ height: '100%', width: `${familyPct}%`, background: P.gold, borderRadius: 99, transition: 'width .5s' }} />
+              <div style={{ height: '100%', width: familyPct + '%', background: P.gold, borderRadius: 99, transition: 'width .5s' }} />
             </div>
             <div style={{ fontSize: 15, fontWeight: 600, color: P.text }}>{REWARDS.monthly}</div>
             {goalMet && <div style={{ marginTop: 8, fontWeight: 700, color: P.gold }}>You earned it this month!</div>}
@@ -528,16 +704,15 @@ export default function Home() {
         </div>
       )}
 
-      {/* NAV */}
-      <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: P.card, borderTop: `1.5px solid ${P.border}`, display: 'flex', zIndex: 100 }}>
+      <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: P.card, borderTop: '1.5px solid ' + P.border, display: 'flex', zIndex: 100 }}>
         {navItems.map(n => (
           <button key={n.id} onClick={() => setView(n.id)} style={{
             flex: 1, padding: '10px 4px 12px', background: 'none', border: 'none',
             color: view === n.id ? P.purple : P.muted,
-            fontSize: 10, fontWeight: view === n.id ? 800 : 400, cursor: 'pointer',
-            borderTop: view === n.id ? `3px solid ${P.purple}` : '3px solid transparent',
+            fontSize: 9, fontWeight: view === n.id ? 800 : 400, cursor: 'pointer',
+            borderTop: view === n.id ? '3px solid ' + P.purple : '3px solid transparent',
           }}>
-            <div style={{ fontSize: 22 }}>{n.icon}</div>
+            <div style={{ fontSize: 20 }}>{n.icon}</div>
             <div>{n.label}</div>
           </button>
         ))}
