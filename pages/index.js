@@ -114,6 +114,42 @@ export default function Home() {
   const [newItem, setNewItem]   = useState({ name: '', qty: 1, unit: 'count', low: 2, category: 'fridge' })
   const [showAddItem, setShowAddItem] = useState(false)
   const [extraItem, setExtraItem] = useState('')
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
+
+  const compressImage = (file) => {
+    return new Promise((resolve) => {
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d')
+      const img = new Image()
+      img.onload = () => {
+        const size = 120
+        canvas.width = size
+        canvas.height = size
+        const scale = Math.max(size / img.width, size / img.height)
+        const w = img.width * scale
+        const h = img.height * scale
+        ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h)
+        resolve(canvas.toDataURL('image/jpeg', 0.7))
+      }
+      img.src = URL.createObjectURL(file)
+    })
+  }
+
+  const handleAvatarUpload = async (member, file) => {
+    if (!file) return
+    setUploadingAvatar(true)
+    try {
+      const compressed = await compressImage(file)
+      update(s => ({
+        ...s,
+        members: { ...s.members, [member]: { ...s.members[member], avatar: compressed } }
+      }))
+      toast$('Photo saved!', 'good')
+    } catch (e) {
+      toast$('Upload failed', 'muted')
+    }
+    setUploadingAvatar(false)
+  }
 
   useEffect(() => {
     fetchState().then(s => {
@@ -280,26 +316,183 @@ export default function Home() {
     muted:   { bg: P.muted,      color: '#fff' },
   }
 
-  if (!me) {
+  const Avatar = ({ member, size = 48 }) => {
+    const avatar = state && state.members[member] && state.members[member].avatar
+    const c = P[member]
+    if (avatar) {
+      return (
+        <img src={avatar} alt={member} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', border: '2px solid ' + c.main, flexShrink: 0 }} />
+      )
+    }
     return (
-      <div style={{ minHeight: '100svh', background: P.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, gap: 16 }}>
+      <div style={{ width: size, height: size, borderRadius: '50%', background: c.light, border: '2px solid ' + c.main, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.45, flexShrink: 0 }}>
+        {EMOJIS[member]}
+      </div>
+    )
+  }
+
+  if (!me && !loading && state) {
+    return (
+      <div style={{ minHeight: '100svh', background: P.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, gap: 14 }}>
         <div style={{ fontSize: 56 }}>🏡</div>
         <div style={{ fontSize: 26, fontWeight: 800, color: P.text }}>House Points</div>
-        <div style={{ color: P.muted, fontSize: 15, marginBottom: 8 }}>Who's playing?</div>
+        <div style={{ color: P.muted, fontSize: 15, marginBottom: 4 }}>Who's playing?</div>
         {MEMBERS.map(m => {
           const c = P[m]
+          const hasAvatar = state.members[m] && state.members[m].avatar
           return (
-            <button key={m} onClick={() => setMe(m)} style={{
-              background: c.light, color: c.dark,
-              border: '2px solid ' + c.main,
-              borderRadius: 18, padding: '14px 0', width: 220,
-              fontSize: 18, fontWeight: 800, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-            }}>
-              <span style={{ fontSize: 24 }}>{EMOJIS[m]}</span> {m}
-            </button>
+            <div key={m} style={{ display: 'flex', alignItems: 'center', gap: 10, width: 240 }}>
+              <button onClick={() => setMe(m)} style={{
+                background: c.light, color: c.dark,
+                border: '2px solid ' + c.main,
+                borderRadius: 18, padding: '10px 0', flex: 1,
+                fontSize: 17, fontWeight: 800, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+              }}>
+                <Avatar member={m} size={38} />
+                {m}
+              </button>
+              <label style={{ cursor: 'pointer', flexShrink: 0 }} title={hasAvatar ? 'Change photo' : 'Add photo'}>
+                <div style={{ width: 34, height: 34, borderRadius: 10, background: hasAvatar ? c.light : P.border, border: '1.5px solid ' + (hasAvatar ? c.main : P.border), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>
+                  {uploadingAvatar ? '...' : '📷'}
+                </div>
+                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => e.target.files[0] && handleAvatarUpload(m, e.target.files[0])} />
+              </label>
+            </div>
           )
         })}
+        <div style={{ width: 240, height: 1, background: P.border, margin: '4px 0' }} />
+        <button onClick={() => { setMe('fridge'); setView('fridge') }} style={{
+          background: P.purpleLight, color: P.purple,
+          border: '2px solid ' + P.purple,
+          borderRadius: 18, padding: '14px 0', width: 240,
+          fontSize: 17, fontWeight: 800, cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+        }}>
+          <span style={{ fontSize: 24 }}>🛒</span> Fridge &amp; Grocery
+        </button>
+      </div>
+    )
+  }
+
+  if (!me) {
+    return <div style={{ minHeight: '100svh', background: P.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: P.muted }}>Loading...</div>
+  }
+
+  if (me === 'fridge' && !loading && state) {
+    const inventory = state.inventory || DEFAULT_INVENTORY
+    const groceryExtra = state.groceryExtra || []
+    const lowItems = inventory.filter(i => i.qty <= i.low)
+    return (
+      <div style={{ minHeight: '100svh', background: P.bg, color: P.text, fontFamily: 'inherit', paddingBottom: 32 }}>
+        {toast && (
+          <div style={{
+            position: 'fixed', top: 18, left: '50%', transform: 'translateX(-50%)',
+            background: P.Jet.main, color: '#fff',
+            padding: '10px 24px', borderRadius: 99, fontWeight: 700, fontSize: 14,
+            zIndex: 999, boxShadow: '0 4px 24px rgba(0,0,0,0.12)', whiteSpace: 'nowrap',
+          }}>{toast.msg}</div>
+        )}
+        <div style={{ background: P.card, borderBottom: '1.5px solid ' + P.border, padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 50 }}>
+          <div style={{ fontSize: 18, fontWeight: 800 }}>🛒 Fridge &amp; Grocery</div>
+          <button onClick={() => setMe(null)} style={{ background: P.purpleLight, color: P.purple, border: '1.5px solid ' + P.purple, borderRadius: 99, padding: '5px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>← Back</button>
+        </div>
+        <div style={{ padding: '16px 16px 0' }}>
+
+          <div style={{ background: P.card, border: '1.5px solid ' + P.border, borderRadius: 20, padding: '16px 18px', marginBottom: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div style={{ fontSize: 15, fontWeight: 800 }}>Shopping list</div>
+              {groceryExtra.some(i => i.done) && (
+                <button onClick={clearDoneGroceries} style={{ background: P.border, color: P.muted, border: 'none', borderRadius: 14, padding: '4px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Clear done</button>
+              )}
+            </div>
+            {lowItems.length === 0 && groceryExtra.length === 0 && (
+              <div style={{ color: P.muted, fontSize: 13, textAlign: 'center', padding: '12px 0' }}>All stocked up!</div>
+            )}
+            {lowItems.length > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 10, color: P.Chyna.main, textTransform: 'uppercase', letterSpacing: 1, fontWeight: 700, marginBottom: 8 }}>Running low</div>
+                {lowItems.map(item => (
+                  <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid ' + P.border }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: 99, background: item.qty === 0 ? P.Chyna.main : P.gold }} />
+                      <span style={{ fontSize: 14 }}>{item.name}</span>
+                    </div>
+                    <span style={{ display: 'inline-block', background: item.qty === 0 ? P.Chyna.light : P.goldLight, color: item.qty === 0 ? P.Chyna.main : P.gold, borderRadius: 99, padding: '3px 12px', fontSize: 12, fontWeight: 700 }}>
+                      {item.qty === 0 ? 'Out' : item.qty + ' ' + item.unit + ' left'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {groceryExtra.length > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 10, color: P.muted, textTransform: 'uppercase', letterSpacing: 1, fontWeight: 700, marginBottom: 8 }}>Extra items</div>
+                {groceryExtra.map(i => (
+                  <div key={i.id} onClick={() => toggleExtraGrocery(i.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid ' + P.border, cursor: 'pointer' }}>
+                    <div style={{ width: 20, height: 20, borderRadius: 6, border: '2px solid ' + (i.done ? P.Jet.main : P.border), background: i.done ? P.Jet.main : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      {i.done && <span style={{ color: '#fff', fontSize: 12 }}>✓</span>}
+                    </div>
+                    <span style={{ fontSize: 14, textDecoration: i.done ? 'line-through' : 'none', color: i.done ? P.muted : P.text }}>{i.name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <input value={extraItem} onChange={e => setExtraItem(e.target.value)} onKeyDown={e => e.key === 'Enter' && addExtraGrocery()} placeholder="Add item to list..." style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: '1.5px solid ' + P.border, background: P.bg, color: P.text, fontSize: 14, outline: 'none' }} />
+              <button onClick={addExtraGrocery} style={{ background: P.purple, color: '#fff', border: 'none', borderRadius: 14, padding: '10px 16px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>Add</button>
+            </div>
+          </div>
+
+          <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 10 }}>Inventory</div>
+          {['fridge', 'pantry'].map(cat => (
+            <div key={cat} style={{ background: P.card, border: '1.5px solid ' + P.border, borderRadius: 20, padding: '16px 18px', marginBottom: 14 }}>
+              <div style={{ fontSize: 11, color: P.purple, textTransform: 'uppercase', letterSpacing: 1, fontWeight: 700, marginBottom: 12 }}>{cat === 'fridge' ? 'Fridge' : 'Pantry'}</div>
+              {inventory.filter(i => i.category === cat).map(item => {
+                const isLow = item.qty <= item.low
+                return (
+                  <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid ' + P.border }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontWeight: isLow ? 700 : 400, color: isLow ? P.Chyna.main : P.text }}>{item.name}</div>
+                      <div style={{ fontSize: 11, color: P.muted }}>{item.qty} {item.unit}{isLow ? ' · low' : ''}</div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <button onClick={() => updateQty(item.id, -1)} style={{ width: 32, height: 32, borderRadius: 10, border: '1.5px solid ' + P.border, background: P.bg, color: P.text, fontSize: 18, cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>-</button>
+                      <span style={{ fontSize: 16, fontWeight: 800, minWidth: 24, textAlign: 'center', color: isLow ? P.Chyna.main : P.text }}>{item.qty}</span>
+                      <button onClick={() => updateQty(item.id, 1)} style={{ width: 32, height: 32, borderRadius: 10, border: 'none', background: P.purple, color: '#fff', fontSize: 18, cursor: 'pointer', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ))}
+
+          {showAddItem ? (
+            <div style={{ background: P.card, border: '1.5px solid ' + P.border, borderRadius: 20, padding: '16px 18px', marginBottom: 14 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>New item</div>
+              <input value={newItem.name} onChange={e => setNewItem({ ...newItem, name: e.target.value })} placeholder="Item name" style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: '1.5px solid ' + P.border, background: P.bg, color: P.text, fontSize: 14, marginBottom: 10, outline: 'none', boxSizing: 'border-box' }} />
+              <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                <input type="number" value={newItem.qty} onChange={e => setNewItem({ ...newItem, qty: e.target.value })} placeholder="Qty" style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: '1.5px solid ' + P.border, background: P.bg, color: P.text, fontSize: 14, outline: 'none' }} />
+                <input value={newItem.unit} onChange={e => setNewItem({ ...newItem, unit: e.target.value })} placeholder="Unit" style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: '1.5px solid ' + P.border, background: P.bg, color: P.text, fontSize: 14, outline: 'none' }} />
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+                <input type="number" value={newItem.low} onChange={e => setNewItem({ ...newItem, low: e.target.value })} placeholder="Low at" style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: '1.5px solid ' + P.border, background: P.bg, color: P.text, fontSize: 14, outline: 'none' }} />
+                <select value={newItem.category} onChange={e => setNewItem({ ...newItem, category: e.target.value })} style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: '1.5px solid ' + P.border, background: P.bg, color: P.text, fontSize: 14, outline: 'none' }}>
+                  <option value="fridge">Fridge</option>
+                  <option value="pantry">Pantry</option>
+                </select>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={addInventoryItem} style={{ background: P.purple, color: '#fff', border: 'none', borderRadius: 14, padding: '10px 18px', fontSize: 14, fontWeight: 700, cursor: 'pointer', flex: 1 }}>Add item</button>
+                <button onClick={() => setShowAddItem(false)} style={{ background: P.border, color: P.muted, border: 'none', borderRadius: 14, padding: '10px 18px', fontSize: 14, fontWeight: 700, cursor: 'pointer', flex: 1 }}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => setShowAddItem(true)} style={{ background: P.purpleLight, color: P.purple, border: '1.5px solid ' + P.purple, borderRadius: 16, padding: 14, width: '100%', fontSize: 14, fontWeight: 700, cursor: 'pointer', marginBottom: 16 }}>
+              + Add new item
+            </button>
+          )}
+        </div>
       </div>
     )
   }
@@ -320,7 +513,6 @@ export default function Home() {
     { id: 'board',   icon: '🏠', label: 'Home' },
     { id: 'tasks',   icon: '✅', label: 'Log Task' },
     { id: 'approve', icon: '👍', label: pending > 0 ? 'Approve (' + pending + ')' : 'Approve' },
-    { id: 'fridge',  icon: '🛒', label: 'Fridge' },
     { id: 'rewards', icon: '🎁', label: 'Rewards' },
   ]
 
@@ -354,8 +546,12 @@ export default function Home() {
           <button onClick={() => setMe(null)} style={{
             background: myColor.light, color: myColor.dark,
             border: '1.5px solid ' + myColor.main, borderRadius: 99,
-            padding: '5px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
-          }}>{EMOJIS[me]} {me}</button>
+            padding: '4px 12px 4px 4px', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}>
+            <Avatar member={me} size={26} />
+            {me}
+          </button>
         </div>
       </div>
 
@@ -386,7 +582,7 @@ export default function Home() {
               <div key={m} style={{ ...card(), borderColor: c.main + '55', borderWidth: 2 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 44, height: 44, borderRadius: 14, background: c.light, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>{EMOJIS[m]}</div>
+                    <Avatar member={m} size={48} />
                     <div>
                       <div style={{ fontWeight: 800, fontSize: 16 }}>{m} {m === me && <span style={{ fontSize: 11, color: P.muted, fontWeight: 400 }}>(you)</span>}</div>
                       <div style={{ fontSize: 12, color: P.muted }}>Weekly: {REWARDS.weekly[m]}</div>
@@ -507,7 +703,7 @@ export default function Home() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                          <span style={{ fontSize: 20 }}>{EMOJIS[p.who]}</span>
+                          <Avatar member={p.who} size={32} />
                           <span style={{ fontWeight: 800, color: c.main }}>{p.who}</span>
                         </div>
                         <div style={{ fontSize: 14, marginBottom: 8 }}>{p.taskLabel}</div>
@@ -529,135 +725,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* FRIDGE + GROCERY */}
-      {view === 'fridge' && (
-        <div style={{ padding: '16px 16px 0' }}>
-
-          {/* GROCERY LIST */}
-          <div style={card()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <div style={{ fontSize: 15, fontWeight: 800 }}>Shopping list</div>
-              {groceryExtra.some(i => i.done) && (
-                <button onClick={clearDoneGroceries} style={btn(P.border, P.muted, { fontSize: 11, padding: '4px 10px' })}>Clear done</button>
-              )}
-            </div>
-
-            {lowItems.length === 0 && groceryExtra.length === 0 && (
-              <div style={{ color: P.muted, fontSize: 13, textAlign: 'center', padding: '12px 0' }}>All stocked up!</div>
-            )}
-
-            {lowItems.length > 0 && (
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 10, color: P.Chyna.main, textTransform: 'uppercase', letterSpacing: 1, fontWeight: 700, marginBottom: 8 }}>Running low</div>
-                {lowItems.map(item => (
-                  <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid ' + P.border }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ width: 8, height: 8, borderRadius: 99, background: item.qty === 0 ? P.Chyna.main : P.gold }} />
-                      <span style={{ fontSize: 14 }}>{item.name}</span>
-                    </div>
-                    <span style={pill(item.qty === 0 ? P.Chyna.light : P.goldLight, item.qty === 0 ? P.Chyna.main : P.gold)}>
-                      {item.qty === 0 ? 'Out' : item.qty + ' ' + item.unit + ' left'}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {groceryExtra.length > 0 && (
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 10, color: P.muted, textTransform: 'uppercase', letterSpacing: 1, fontWeight: 700, marginBottom: 8 }}>Extra items</div>
-                {groceryExtra.map(i => (
-                  <div key={i.id} onClick={() => toggleExtraGrocery(i.id)} style={{
-                    display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0',
-                    borderBottom: '1px solid ' + P.border, cursor: 'pointer',
-                  }}>
-                    <div style={{
-                      width: 20, height: 20, borderRadius: 6, border: '2px solid ' + (i.done ? P.Jet.main : P.border),
-                      background: i.done ? P.Jet.main : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                    }}>
-                      {i.done && <span style={{ color: '#fff', fontSize: 12 }}>✓</span>}
-                    </div>
-                    <span style={{ fontSize: 14, textDecoration: i.done ? 'line-through' : 'none', color: i.done ? P.muted : P.text }}>{i.name}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <input
-                value={extraItem}
-                onChange={e => setExtraItem(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && addExtraGrocery()}
-                placeholder="Add item to list..."
-                style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: '1.5px solid ' + P.border, background: P.bg, color: P.text, fontSize: 14, outline: 'none' }}
-              />
-              <button onClick={addExtraGrocery} style={btn(P.purple, '#fff', { padding: '10px 16px' })}>Add</button>
-            </div>
-          </div>
-
-          {/* INVENTORY */}
-          <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 10 }}>Inventory</div>
-
-          {['fridge', 'pantry'].map(cat => (
-            <div key={cat} style={card()}>
-              <div style={{ fontSize: 11, color: P.purple, textTransform: 'uppercase', letterSpacing: 1, fontWeight: 700, marginBottom: 12 }}>
-                {cat === 'fridge' ? 'Fridge' : 'Pantry'}
-              </div>
-              {inventory.filter(i => i.category === cat).map(item => {
-                const isLow = item.qty <= item.low
-                return (
-                  <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid ' + P.border }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 14, fontWeight: isLow ? 700 : 400, color: isLow ? P.Chyna.main : P.text }}>{item.name}</div>
-                      <div style={{ fontSize: 11, color: P.muted }}>{item.qty} {item.unit} {isLow ? '· low' : ''}</div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <button onClick={() => updateQty(item.id, -1)} style={{
-                        width: 32, height: 32, borderRadius: 10, border: '1.5px solid ' + P.border,
-                        background: P.bg, color: P.text, fontSize: 18, cursor: 'pointer', fontWeight: 700,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      }}>-</button>
-                      <span style={{ fontSize: 16, fontWeight: 800, minWidth: 24, textAlign: 'center', color: isLow ? P.Chyna.main : P.text }}>{item.qty}</span>
-                      <button onClick={() => updateQty(item.id, 1)} style={{
-                        width: 32, height: 32, borderRadius: 10, border: 'none',
-                        background: P.purple, color: '#fff', fontSize: 18, cursor: 'pointer', fontWeight: 700,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      }}>+</button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          ))}
-
-          {showAddItem ? (
-            <div style={card()}>
-              <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>New item</div>
-              <input value={newItem.name} onChange={e => setNewItem({ ...newItem, name: e.target.value })} placeholder="Item name" style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: '1.5px solid ' + P.border, background: P.bg, color: P.text, fontSize: 14, marginBottom: 10, outline: 'none', boxSizing: 'border-box' }} />
-              <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-                <input type="number" value={newItem.qty} onChange={e => setNewItem({ ...newItem, qty: e.target.value })} placeholder="Qty" style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: '1.5px solid ' + P.border, background: P.bg, color: P.text, fontSize: 14, outline: 'none' }} />
-                <input value={newItem.unit} onChange={e => setNewItem({ ...newItem, unit: e.target.value })} placeholder="Unit" style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: '1.5px solid ' + P.border, background: P.bg, color: P.text, fontSize: 14, outline: 'none' }} />
-              </div>
-              <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-                <input type="number" value={newItem.low} onChange={e => setNewItem({ ...newItem, low: e.target.value })} placeholder="Low at" style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: '1.5px solid ' + P.border, background: P.bg, color: P.text, fontSize: 14, outline: 'none' }} />
-                <select value={newItem.category} onChange={e => setNewItem({ ...newItem, category: e.target.value })} style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: '1.5px solid ' + P.border, background: P.bg, color: P.text, fontSize: 14, outline: 'none' }}>
-                  <option value="fridge">Fridge</option>
-                  <option value="pantry">Pantry</option>
-                </select>
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={addInventoryItem} style={btn(P.purple, '#fff', { flex: 1 })}>Add item</button>
-                <button onClick={() => setShowAddItem(false)} style={btn(P.border, P.muted, { flex: 1 })}>Cancel</button>
-              </div>
-            </div>
-          ) : (
-            <button onClick={() => setShowAddItem(true)} style={{ ...btn(P.purpleLight, P.purple), width: '100%', marginBottom: 16, borderRadius: 16, padding: 14, border: '1.5px solid ' + P.purple }}>
-              + Add new item
-            </button>
-          )}
-        </div>
-      )}
-
       {/* REWARDS */}
       {view === 'rewards' && (
         <div style={{ padding: '16px 16px 0' }}>
@@ -668,7 +735,7 @@ export default function Home() {
             <div style={{ fontSize: 13, color: P.muted, marginBottom: 12 }}>Do anything on the task list and earn your treat.</div>
             {MEMBERS.map(m => (
               <div key={m} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, padding: '10px 12px', background: P[m].light, borderRadius: 12 }}>
-                <span style={{ fontSize: 22 }}>{EMOJIS[m]}</span>
+                <Avatar member={m} size={40} />
                 <div>
                   <div style={{ fontWeight: 700, color: P[m].dark }}>{m}</div>
                   <div style={{ fontSize: 13, color: P[m].main }}>{REWARDS.daily[m]}</div>
@@ -683,7 +750,7 @@ export default function Home() {
             {MEMBERS.map(m => (
               <div key={m} style={{ marginBottom: 14, paddingBottom: 14, borderBottom: '1px solid ' + P.border }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                  <span style={{ fontSize: 20 }}>{EMOJIS[m]}</span>
+                  <Avatar member={m} size={36} />
                   <span style={{ fontWeight: 800, color: P[m].dark }}>{m}</span>
                 </div>
                 <div style={{ fontSize: 14, color: P[m].main, fontWeight: 600, marginBottom: 6 }}>{REWARDS.weekly[m]}</div>
